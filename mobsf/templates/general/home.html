@@ -1,0 +1,3227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Security Analysis (ASA)</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- JSZip for local client-side parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- jsPDF for the condensed 8-page report -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bgMain: '#050609',
+                        panel: '#10131D',
+                        panelBorder: '#25233A',
+                        cyanAccent: '#00D9FF',
+                        purpleAccent: '#A855F7',
+                        blueAccent: '#2563EB',
+                        greenAccent: '#00E5A0',
+                        amberAccent: '#FBBF24',
+                        redAccent: '#FF477E'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            background-color: #050609;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(90deg, #00F5A0 0%, #8B5CF6 55%, #EC4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(135deg, #00C98D 0%, #8B5CF6 100%);
+            transition: all 0.2s;
+        }
+        .btn-gradient:hover {
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+            transform: translateY(-1px);
+        }
+        .btn-gradient:active {
+            transform: translateY(0);
+        }
+        
+        .panel-glow {
+            border: 1px solid #25233A;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .drop-active {
+            border-color: #00F5A0 !important;
+            background-color: rgba(0, 229, 255, 0.05);
+        }
+
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.1s linear;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* 3D Interactive Background Canvas */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+            opacity: 0.65;
+        }
+
+        /* Scan Line sweep animation on code windows */
+        .scan-sweep {
+            position: relative;
+            overflow: hidden;
+        }
+        .scan-sweep::after {
+            content: '';
+            position: absolute;
+            top: -100%;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent, rgba(0, 229, 255, 0.15), transparent);
+            animation: sweep 3s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes sweep {
+            0% { top: -100%; }
+            100% { top: 100%; }
+        }
+        /* ============================================================
+           ASA PREMIUM MIDNIGHT / VIOLET / MAGENTA / CYAN THEME
+           Visual-only layer: preserves existing structure and behavior.
+           ============================================================ */
+        :root {
+            --asa-bg: #020617;
+            --asa-bg-2: #050B1F;
+            --asa-panel: #07132D;
+            --asa-panel-2: #0B1B3A;
+            --asa-border: rgba(37, 99, 235, 0.28);
+            --asa-border-hover: rgba(0, 217, 255, 0.55);
+            --asa-cyan: #00D9FF;
+            --asa-blue: #2563EB;
+            --asa-violet: #8B5CF6;
+            --asa-purple: #A855F7;
+            --asa-magenta: #EC38BC;
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 12% 8%, rgba(37,99,235,0.12), transparent 28%),
+                radial-gradient(circle at 76% 18%, rgba(139,92,246,0.12), transparent 30%),
+                radial-gradient(circle at 92% 70%, rgba(236,56,188,0.075), transparent 27%),
+                radial-gradient(circle at 18% 88%, rgba(0,217,255,0.055), transparent 30%),
+                #020617;
+            color: #F8FAFC;
+        }
+
+        #bg-canvas {
+            opacity: 0.78;
+            filter: saturate(1.18) contrast(1.04);
+        }
+
+        .panel-glow {
+            border-color: var(--asa-border);
+            background:
+                linear-gradient(145deg, rgba(11,27,58,0.90), rgba(4,10,27,0.94));
+            box-shadow:
+                0 12px 34px rgba(0,0,0,0.48),
+                inset 0 1px 0 rgba(255,255,255,0.035),
+                inset 0 0 30px rgba(37,99,235,0.025);
+            transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
+        }
+
+        .panel-glow:hover {
+            border-color: var(--asa-border-hover);
+            box-shadow:
+                0 16px 42px rgba(0,0,0,0.52),
+                0 0 24px rgba(0,217,255,0.055),
+                inset 0 1px 0 rgba(255,255,255,0.045);
+        }
+
+        .gradient-text {
+            background: linear-gradient(90deg, #F8FAFC 0%, #A855F7 38%, #7C3AED 65%, #00D9FF 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn-gradient {
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 48%, #EC38BC 100%);
+            color: #FFFFFF !important;
+            box-shadow: 0 8px 24px rgba(124,58,237,0.28), 0 0 18px rgba(236,56,188,0.10);
+        }
+
+        .btn-gradient:hover {
+            background: linear-gradient(135deg, #8B5CF6 0%, #C026D3 50%, #EC38BC 100%);
+            box-shadow: 0 0 28px rgba(168,85,247,0.28), 0 12px 30px rgba(0,0,0,0.35);
+            transform: translateY(-1px);
+        }
+
+        .drop-active {
+            border-color: #00D9FF !important;
+            background: rgba(0,217,255,0.055) !important;
+            box-shadow: 0 0 30px rgba(0,217,255,0.10) inset, 0 0 20px rgba(0,217,255,0.06);
+        }
+
+        .nav-btn {
+            transition: background-color .22s ease, border-color .22s ease, color .22s ease, box-shadow .22s ease, transform .22s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(124,58,237,0.10) !important;
+            border-color: rgba(168,85,247,0.22);
+        }
+
+        .active-btn {
+            background: linear-gradient(90deg, rgba(124,58,237,0.24), rgba(37,99,235,0.13)) !important;
+            border-color: rgba(168,85,247,0.55) !important;
+            box-shadow:
+                inset 0 0 22px rgba(168,85,247,0.08),
+                0 0 18px rgba(124,58,237,0.10);
+        }
+
+        .scan-sweep::after {
+            background: linear-gradient(to bottom, transparent, rgba(0,217,255,0.12), rgba(168,85,247,0.10), transparent);
+        }
+
+        ::selection {
+            background: rgba(168,85,247,0.35);
+            color: #ffffff;
+        }
+
+        /* Premium 3D ambient lighting — decorative only. */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            pointer-events: none;
+            z-index: 0;
+            border-radius: 50%;
+            filter: blur(70px);
+            opacity: .20;
+        }
+        body::before {
+            width: 360px;
+            height: 360px;
+            top: 6%;
+            right: 14%;
+            background: radial-gradient(circle, rgba(124,58,237,.32), transparent 68%);
+            animation: asaAmbientOne 11s ease-in-out infinite alternate;
+        }
+        body::after {
+            width: 300px;
+            height: 300px;
+            bottom: 4%;
+            left: 12%;
+            background: radial-gradient(circle, rgba(0,217,255,.22), transparent 68%);
+            animation: asaAmbientTwo 14s ease-in-out infinite alternate;
+        }
+        @keyframes asaAmbientOne {
+            from { transform: translate3d(-20px, 8px, 0) scale(.92); }
+            to { transform: translate3d(25px, -16px, 0) scale(1.08); }
+        }
+        @keyframes asaAmbientTwo {
+            from { transform: translate3d(15px, -10px, 0) scale(.95); }
+            to { transform: translate3d(-20px, 18px, 0) scale(1.06); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            body::before, body::after { animation: none; }
+        }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden selection:bg-cyanAccent selection:text-black font-sans text-sm">
+
+    <!-- 3D Interactive Background Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 border-r border-panelBorder bg-[#07090F] flex flex-col justify-between h-full z-10 shrink-0">
+        <div>
+            <!-- Logo -->
+            <div class="p-6 flex items-center space-x-3 mb-2 border-b border-panelBorder">
+                <div class="w-8 h-8 rounded bg-blueAccent/20 border border-blueAccent/50 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-blueAccent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-[11px] tracking-wider text-white uppercase leading-tight">APPLICATION</h1>
+                    <p class="text-[9px] text-cyanAccent tracking-widest uppercase font-bold">SECURITY ANALYSIS [ASA]</p>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="px-4 py-4 space-y-1" id="sidebar-nav">
+                <button data-view="dashboard" class="nav-btn active-btn w-full flex items-center space-x-3 px-4 py-2.5 bg-blueAccent/10 border border-blueAccent/30 text-white rounded-lg transition-all text-xs font-semibold">
+                    <span class="text-blueAccent text-base">🏠</span><span>Dashboard</span>
+                </button>
+                <button data-view="scan" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">🎯</span><span>Scan Console</span>
+                </button>
+                <button data-view="applications" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">📱</span><span>Applications DB</span>
+                </button>
+                <button data-view="reports" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">📄</span><span>Reports List</span>
+                </button>
+                <button data-view="threats" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">⚠️</span><span>Threat Matrix</span>
+                </button>
+                <button data-view="analytics" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">📊</span><span>Analytics HUD</span>
+                </button>
+                <button data-view="privacy" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">🔒</span><span>Privacy Sandbox</span>
+                </button>
+                <button data-view="api" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">🔌</span><span>API Access</span>
+                </button>
+                <button data-view="about" class="nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs">
+                    <span class="text-base">ℹ️</span><span>System About</span>
+                </button>
+            </nav>
+        </div>
+        
+        <!-- Bottom Sidebar -->
+        <div class="p-4 mb-2">
+            <div class="bg-panel border border-panelBorder rounded-xl p-4 mb-4 relative overflow-hidden">
+                <p class="text-[9px] text-gray-400 uppercase tracking-widest mb-1.5 font-bold">Local Protection</p>
+                <p class="text-[10px] text-greenAccent font-bold mb-2">ANALYSIS ENGINE<br>ONLINE</p>
+                <p class="text-[9px] text-gray-500 leading-tight">Secure sandboxed binary processing</p>
+            </div>
+            <button id="logout-btn" class="w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-redAccent hover:bg-redAccent/5 rounded-lg transition-all text-xs font-medium">
+                <span class="text-base">🚪</span><span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 flex flex-col h-full overflow-y-auto p-8 relative">
+        
+        <!-- TOP HEADER -->
+        <header class="flex justify-between items-center mb-8">
+            <div class="text-[10px] bg-panel border border-panelBorder px-4 py-2 rounded-full flex items-center gap-2">
+                <div class="w-1.5 h-1.5 rounded-full bg-greenAccent shadow-[0_0_5px_#00E5A0]"></div>
+                <span class="text-gray-300">APPLICATION SECURITY ANALYSIS ENGINE ONLINE</span>
+            </div>
+            <div class="flex items-center gap-2 bg-panel border border-panelBorder px-4 py-1.5 rounded-full text-[10px]">
+                <div class="w-5 h-5 bg-cyanAccent/10 rounded flex items-center justify-center text-cyanAccent border border-cyanAccent/40 mr-1">🛡️</div>
+                <div class="flex flex-col">
+                    <span class="font-bold text-white leading-tight uppercase">APPLICATION SECURITY ANALYSIS</span>
+                    <span class="text-gray-500 text-[8px] uppercase">Security Integrity Evaluator</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- VIEW WRAPPER -->
+        <div id="view-container" class="flex-grow flex flex-col">
+            
+            <!-- 1. DASHBOARD VIEW -->
+            <div id="view-dashboard" class="view-panel flex-grow flex flex-col">
+                <!-- TITLE (Single line title change) -->
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight uppercase gradient-text inline-block">
+                        Application Security Analysis
+                    </h2>
+                    <p class="text-[10px] text-gray-400 tracking-[0.25em] uppercase font-semibold mt-2">
+                        ADVANCED MOBILE APPLICATION SECURITY ANALYSIS PLATFORM
+                    </p>
+                </div>
+
+                <!-- MAIN TWO COLUMNS -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+                    
+                    <!-- UPLOAD APPLICATION PANEL -->
+                    <div class="bg-panel rounded-xl panel-glow p-6 flex flex-col min-h-[360px]" id="upload-panel">
+                        <h3 class="text-sm font-bold text-white mb-1 uppercase tracking-wide">Upload Application</h3>
+                        <p class="text-[11px] text-gray-400 mb-6">Start dynamic file-system decompression, bytecode indexing and structural calculations</p>
+                        
+                        <!-- Explicitly supports specified file formats -->
+                        <input type="file" id="file-upload" multiple class="hidden" accept=".apk,.APK,.aab,.AAB,.ipa,.IPA,.appx,.APPX,.zip,.ZIP,.exe,.EXE">
+
+                        <div id="drop-zone" class="flex-1 border-2 border-dashed border-panelBorder rounded-xl flex flex-col items-center justify-center p-6 transition-colors cursor-pointer group hover:border-cyanAccent/40 relative">
+                            <div class="mb-4 text-cyanAccent group-hover:scale-110 transition-transform">
+                                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                </svg>
+                            </div>
+                            
+                            <p class="text-gray-300 text-xs mb-2 text-center font-medium" id="drop-text">Drag & Drop APK, AAB, IPA, APPX or EXE files here</p>
+                            <p class="text-gray-500 text-[10px] mb-4">or</p>
+                            
+                            <button id="upload-btn" class="w-full max-w-[200px] py-2.5 rounded-lg btn-gradient text-black font-extrabold text-xs tracking-wider shadow-lg uppercase">
+                                SELECT FILE
+                            </button>
+                            
+                            
+                        </div>
+                    </div>
+
+                    <!-- REAL SECURITY ANALYSIS SUMMARY / ACTIVE ANTIVIRUS SCAN MONITOR -->
+                    <div class="bg-panel rounded-xl panel-glow p-6 flex flex-col relative overflow-hidden min-h-[360px]" id="results-panel">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wide">Scan Diagnostics</h3>
+                        </div>
+
+                        <!-- Before Scanning State -->
+                        <div id="scan-placeholder" class="flex-grow flex flex-col items-center justify-center text-center p-6">
+                            <div class="w-16 h-16 rounded-full bg-white/5 border border-panelBorder flex items-center justify-center mb-4 text-gray-400">
+                                🔍
+                            </div>
+                            <p class="text-gray-400 text-xs max-w-xs">No active binary package scanned during this session. Upload a file above to view structural metrics.</p>
+                        </div>
+
+                        <!-- Active Antivirus-Style Scan Feedback Screen -->
+                        <div id="antivirus-scan-monitor" class="hidden flex-grow flex flex-col justify-between scan-sweep relative">
+                            <div class="bg-black/40 border border-[#25233A] rounded-lg p-4 font-mono text-xs text-cyanAccent mb-4 flex-grow overflow-y-auto max-h-[200px]" id="console-logs">
+                                <!-- Log components will append dynamically -->
+                            </div>
+                            <div class="flex items-center gap-4 bg-[#0a0f1b] border border-panelBorder p-3 rounded-lg">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex justify-between text-[10px] font-bold text-gray-400 mb-1">
+                                        <span class="truncate" id="active-scanning-filename">Extracting files...</span>
+                                        <span id="scan-progress-percentage">0%</span>
+                                    </div>
+                                    <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                        <div id="scan-progress-bar" class="h-full bg-cyanAccent transition-all duration-75" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- After Scanning State -->
+                        <div id="scan-results" class="hidden flex-grow flex flex-col justify-between">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="bg-[#0b0e17] border border-panelBorder p-3 rounded-lg">
+                                    <p class="text-[9px] text-gray-500 uppercase tracking-wide mb-1">Target Filename</p>
+                                    <p class="text-white font-semibold text-xs truncate" id="res-filename">--</p>
+                                </div>
+                                <div class="bg-[#0b0e17] border border-panelBorder p-3 rounded-lg">
+                                    <p class="text-[9px] text-gray-500 uppercase tracking-wide mb-1">File Byte Scale</p>
+                                    <p class="text-white font-semibold text-xs" id="res-filesize">--</p>
+                                </div>
+                                <div class="bg-[#0b0e17] border border-panelBorder p-3 rounded-lg col-span-2">
+                                    <p class="text-[9px] text-gray-500 uppercase tracking-wide mb-1 flex justify-between">
+                                        <span>SHA-256 Digest Signature</span>
+                                        <button id="copy-hash-btn" class="text-cyanAccent hover:underline text-[8px] uppercase tracking-wider font-bold">Copy Hash</button>
+                                    </p>
+                                    <p class="text-white font-mono text-[10px] break-all leading-tight" id="res-sha256">--</p>
+                                </div>
+                                <div class="bg-[#0b0e17] border border-panelBorder p-3 rounded-lg">
+                                    <p class="text-[9px] text-gray-500 uppercase tracking-wide mb-1 flex justify-between">
+                                        <span>Shannon Entropy Scale (0-8)</span>
+                                    </p>
+                                    <p class="text-white font-mono text-xs" id="res-entropy">--</p>
+                                </div>
+                                <div class="bg-[#0b0e17] border border-panelBorder p-3 rounded-lg">
+                                    <p class="text-[9px] text-gray-500 uppercase tracking-wide mb-1">Risk Assessment</p>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded uppercase" id="res-risk-badge">--</span>
+                                </div>
+                            </div>
+
+                            <!-- Native Dynamic Library (.so) UI Container -->
+                            <div class="bg-[#0a0f1b] border border-cyanAccent/10 p-3 rounded-lg mt-3 flex justify-between items-center">
+                                <div>
+                                    <p class="text-[9px] text-cyanAccent uppercase tracking-wide mb-0.5 font-bold">Native Interface Subsystem (.so)</p>
+                                    <p class="text-gray-400 text-[10px]" id="res-so-status">No native modules calculated</p>
+                                </div>
+                                <div id="res-so-indicator" class="text-xs font-mono font-bold bg-white/5 border border-panelBorder px-2.5 py-1 rounded">--</div>
+                            </div>
+
+                            <div class="flex gap-3 mt-4">
+                                <button id="view-report-btn" class="flex-1 py-2 rounded-lg bg-panelBorder text-white hover:bg-white/10 font-bold text-xs tracking-wider transition-all">
+                                    VIEW DEDUCTION DETAILS
+                                </button>
+                                <button id="reset-summary-btn" class="px-4 py-2 rounded-lg bg-redAccent/10 text-redAccent hover:bg-redAccent/20 font-bold text-xs tracking-wider transition-all">
+                                    RESET
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW FEATURE: BATCH SCAN QUEUE (multi-file scanning) -->
+                <!-- Purely additive panel: hidden until 2+ files are selected/dropped -->
+                <!-- at once. Does not alter any existing single-file behavior above. -->
+                <div id="batch-queue-panel" class="hidden bg-panel rounded-xl panel-glow p-6 mb-6">
+                    <div class="flex justify-between items-center mb-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wide">Batch Scan Queue</h3>
+                            <p class="text-[11px] text-gray-400" id="batch-queue-subtitle">Files are scanned one at a time automatically.</p>
+                        </div>
+                        <span id="batch-queue-counter" class="text-[10px] font-bold px-2.5 py-1 rounded uppercase bg-cyanAccent/10 text-cyanAccent border border-cyanAccent/30">0 / 0 done</span>
+                    </div>
+                    <div id="batch-queue-list" class="space-y-2 max-h-[320px] overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- SECURITY SCORE PANEL (Dynamic scan output directly linked to Antivirus sweep) -->
+                <div class="bg-panel rounded-xl panel-glow p-6 mb-6 flex flex-col md:flex-row items-center gap-6">
+                    
+                    <div class="w-full md:w-1/4 flex items-center justify-center gap-6 md:border-r border-panelBorder md:pr-6">
+                        <div class="text-right">
+                            <p class="text-[10px] text-white font-bold uppercase tracking-widest mb-1">Security<br>Score</p>
+                        </div>
+                        <!-- Progress Ring initialized to 0 stroke (empty) -->
+                        <div class="relative w-20 h-20 flex items-center justify-center">
+                            <svg class="w-20 h-20 transform -rotate-90">
+                                <circle cx="40" cy="40" r="36" fill="none" stroke="#25233A" stroke-width="6"></circle>
+                                <circle id="score-ring" cx="40" cy="40" r="36" fill="none" stroke="#00F5A0" stroke-width="6" stroke-dasharray="226" stroke-dashoffset="226" class="progress-ring__circle"></circle>
+                            </svg>
+                            <div class="absolute flex flex-col items-center justify-center">
+                                <span class="text-2xl font-bold text-white leading-none" id="score-val">--</span>
+                                <span class="text-[8px] text-gray-400 mt-1 uppercase font-bold" id="score-subtext">PENDING</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 w-full flex flex-col md:flex-row gap-8 md:pl-6">
+                        <!-- Checklist -->
+                        <div class="flex flex-col gap-2.5 justify-center flex-1" id="checklist">
+                            <div class="check-item flex items-center gap-2 text-[11px] text-gray-500 transition-colors duration-200">
+                                <div class="icon-box w-3.5 h-3.5 rounded-full border border-gray-600 flex items-center justify-center text-[9px] font-bold">•</div> 
+                                <span>Binary Buffer Read Completed</span>
+                            </div>
+                            <div class="check-item flex items-center gap-2 text-[11px] text-gray-500 transition-colors duration-200">
+                                <div class="icon-box w-3.5 h-3.5 rounded-full border border-gray-600 flex items-center justify-center text-[9px] font-bold">•</div> 
+                                <span>Shannon Entropy Evaluated</span>
+                            </div>
+                            <div class="check-item flex items-center gap-2 text-[11px] text-gray-500 transition-colors duration-200">
+                                <div class="icon-box w-3.5 h-3.5 rounded-full border border-gray-600 flex items-center justify-center text-[9px] font-bold">•</div> 
+                                <span>Package Structure Decompiled</span>
+                            </div>
+                            <div class="check-item flex items-center gap-2 text-[11px] text-gray-500 transition-colors duration-200">
+                                <div class="icon-box w-3.5 h-3.5 rounded-full border border-gray-600 flex items-center justify-center text-[9px] font-bold">•</div> 
+                                <span>Core Manifest and Security Vectors Assessed</span>
+                            </div>
+                        </div>
+
+                        <div class="hidden md:block w-px h-20 bg-panelBorder"></div>
+
+                        <!-- Status Summary -->
+                        <div class="flex flex-col justify-center relative flex-1">
+                            <p class="text-[9px] text-gray-400 uppercase tracking-widest mb-1.5 font-bold">Overall Status</p>
+                            <p class="text-gray-400 font-bold text-xl mb-2 tracking-wide uppercase" id="status-title">AWAITING BINARY</p>
+                            <p class="text-[10px] text-gray-400 leading-relaxed max-w-[260px]" id="status-desc">Provide a package to start cryptographic and file system validation processes</p>
+                            <svg class="absolute right-4 top-2 w-16 h-16 text-panelBorder/30 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- LIVE PERMISSION ANALYSIS -->
+                <div class="bg-panel rounded-xl panel-glow p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4"><div><h3 class="text-sm font-bold text-white uppercase tracking-wider">Permission Analysis</h3><p class="text-[10px] text-gray-500 mt-1">Live permission evidence from the completed backend scan.</p></div><span class="text-[9px] uppercase tracking-wider text-gray-500">LIVE</span></div>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div class="bg-white/5 rounded-lg p-3"><p class="text-[9px] text-gray-400 uppercase font-bold">Total</p><p id="permission-total" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+                      <div class="bg-redAccent/5 rounded-lg p-3"><p class="text-[9px] text-redAccent uppercase font-bold">Dangerous</p><p id="permission-dangerous" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+                      <div class="bg-greenAccent/5 rounded-lg p-3"><p class="text-[9px] text-greenAccent uppercase font-bold">Normal</p><p id="permission-normal" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+                      <div class="bg-amberAccent/5 rounded-lg p-3"><p class="text-[9px] text-amberAccent uppercase font-bold">Signature</p><p id="permission-signature" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+                      <div class="bg-purpleAccent/5 rounded-lg p-3"><p class="text-[9px] text-purple-300 uppercase font-bold">Unknown</p><p id="permission-unknown" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+                    </div>
+                </div>
+
+                <!-- LIVE BACKEND FINDING SUMMARY -->
+                <div class="bg-panel rounded-xl panel-glow p-6 mb-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Backend Security Findings</h3>
+                            <p class="text-[10px] text-gray-500 mt-1">Counts below come directly from the ASAF/MobSF scorecard response.</p>
+                        </div>
+                        <span id="backend-summary-status" class="text-[9px] uppercase tracking-wider font-bold text-gray-500">WAITING FOR SCAN</span>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div class="bg-redAccent/5 border border-redAccent/20 rounded-lg p-3">
+                            <p class="text-[9px] text-redAccent uppercase font-bold">High</p>
+                            <p id="finding-high" class="text-2xl font-extrabold text-white mt-1">0</p>
+                        </div>
+                        <div class="bg-amberAccent/5 border border-amberAccent/20 rounded-lg p-3">
+                            <p class="text-[9px] text-amberAccent uppercase font-bold">Warning</p>
+                            <p id="finding-warning" class="text-2xl font-extrabold text-white mt-1">0</p>
+                        </div>
+                        <div class="bg-blueAccent/5 border border-blueAccent/20 rounded-lg p-3">
+                            <p class="text-[9px] text-blueAccent uppercase font-bold">Info</p>
+                            <p id="finding-info" class="text-2xl font-extrabold text-white mt-1">0</p>
+                        </div>
+                        <div class="bg-purpleAccent/5 border border-purpleAccent/20 rounded-lg p-3">
+                            <p class="text-[9px] text-purpleAccent uppercase font-bold">Hotspot</p>
+                            <p id="finding-hotspot" class="text-2xl font-extrabold text-white mt-1">0</p>
+                        </div>
+                        <div class="bg-greenAccent/5 border border-greenAccent/20 rounded-lg p-3">
+                            <p class="text-[9px] text-greenAccent uppercase font-bold">Secure</p>
+                            <p id="finding-secure" class="text-2xl font-extrabold text-white mt-1">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BOTTOM 4 STATUS CARDS -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-panel rounded-xl panel-glow p-4 flex items-center gap-4">
+                        <div class="text-cyanAccent text-3xl">🌐</div>
+                        <div>
+                            <p class="text-sm font-bold text-white tracking-wide">ONLINE</p>
+                            <p class="text-[8px] text-gray-400 tracking-widest uppercase mt-1 mb-2">ASA Platform Core</p>
+                            <p class="text-[8px] text-greenAccent font-bold uppercase flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-greenAccent animate-pulse"></span> Connected
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bg-panel rounded-xl panel-glow p-4 flex items-center gap-4">
+                        <div class="text-blueAccent text-3xl">🛡️</div>
+                        <div>
+                            <p class="text-sm font-bold text-white tracking-wide">READY</p>
+                            <p class="text-[8px] text-gray-400 tracking-widest uppercase mt-1 mb-2">Platform Parser</p>
+                            <p class="text-[8px] text-greenAccent font-bold uppercase flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-greenAccent"></span> Sandbox Active
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bg-panel rounded-xl panel-glow p-4 flex items-center gap-4">
+                        <div class="text-purpleAccent text-3xl">📊</div>
+                        <div>
+                            <p class="text-sm font-bold text-white tracking-wide">ISOLATED</p>
+                            <p class="text-[8px] text-gray-400 tracking-widest uppercase mt-1 mb-2">Threat Evaluation</p>
+                            <p class="text-[8px] text-greenAccent font-bold uppercase flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-greenAccent"></span> Local-Only
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bg-panel rounded-xl panel-glow p-4 flex items-center gap-4">
+                        <div class="text-cyanAccent text-3xl">🚀</div>
+                        <div>
+                            <p class="text-sm font-bold text-white tracking-wide">IDLE</p>
+                            <p class="text-[8px] text-gray-400 tracking-widest uppercase mt-1 mb-2">Dynamic Modules</p>
+                            <p class="text-[8px] text-cyanAccent font-bold uppercase flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-cyanAccent"></span> Standby State
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. SCAN VIEW (Shortcut redirection wrapper) -->
+            <div id="view-scan" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-8 max-w-xl mx-auto text-center">
+                    <h3 class="text-lg font-bold text-white mb-2 uppercase">File Scan Center</h3>
+                    <p class="text-xs text-gray-400 mb-6">Drag & drop or upload APK binaries directly on the main dashboard screen to parse configuration details instantly.</p>
+                    <button onclick="activateNavView('dashboard')" class="px-6 py-2.5 rounded-lg btn-gradient text-black font-extrabold text-xs uppercase tracking-wide">
+                        Go to Dashboard Dropzone
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. APPLICATIONS DB VIEW -->
+            <div id="view-applications" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">Sandbox Application Registry</h3>
+                    <p class="text-xs text-gray-400 mb-6">Historical index of target packages analyzed during this active session lifespan.</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="border-b border-panelBorder text-gray-400 font-bold">
+                                    <th class="py-3 px-4">Application Filename</th>
+                                    <th class="py-3 px-4">Size (Bytes)</th>
+                                    <th class="py-3 px-4">Entropy Code Score</th>
+                                    <th class="py-3 px-4">Internal File Count</th>
+                                    <th class="py-3 px-4">Status Score</th>
+                                </tr>
+                            </thead>
+                            <tbody id="app-database-body">
+                                <tr id="app-database-empty">
+                                    <td colspan="5" class="py-8 text-center text-gray-500">No applications processed during this session.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. REPORTS LIST VIEW -->
+            <div id="view-reports" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">Generated Session Audit Records</h3>
+                    <p class="text-xs text-gray-400 mb-6">Click detail values to examine detailed cryptographic deductions and compliance records.</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="border-b border-panelBorder text-gray-400 font-bold">
+                                    <th class="py-3 px-4">Record Hash Ref</th>
+                                    <th class="py-3 px-4">Target Name</th>
+                                    <th class="py-3 px-4">Score Metric</th>
+                                    <th class="py-3 px-4">Evaluation</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reports-database-body">
+                                <tr id="reports-database-empty">
+                                    <td colspan="4" class="py-8 text-center text-gray-500">No session reports compiled yet. Analyze a file to spawn threat reports.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. THREAT MATRIX VIEW -->
+            <div id="view-threats" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">Static Threat Definition Maps</h3>
+                    <p class="text-xs text-gray-400 mb-6">Vulnerability and architectural check benchmarks processed by the client-side parser.</p>
+
+                    <div class="bg-[#0b0e17] border border-panelBorder p-4 rounded-lg mb-4">
+                        <h4 class="text-xs font-bold text-cyanAccent uppercase mb-2">Vulnerability / Scan Search</h4>
+                        <div class="flex gap-2">
+                            <input id="vulnerability-search-input"
+                                   class="flex-1 bg-black/40 border border-panelBorder rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-cyanAccent"
+                                   placeholder="Search MD5, package name, app name or file name">
+                            <button id="vulnerability-search-btn"
+                                    class="px-4 py-2 rounded-lg btn-gradient text-black font-bold text-xs uppercase">
+                                Search
+                            </button>
+                        </div>
+                        <p id="vulnerability-search-status" class="text-[10px] text-gray-500 mt-2">Uses the existing ASAF search endpoint.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-[#0b0e17] border border-panelBorder p-4 rounded-lg">
+                            <h4 class="text-xs font-bold text-cyanAccent mb-1 uppercase">Shannon Entropy Validation</h4>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">Computes file code distribution to evaluate obfuscation levels. Standard code averages 4.5–6.5. Packed, compressed, or custom encrypted architectures exceed 7.2.</p>
+                        </div>
+                        <div class="bg-[#0b0e17] border border-panelBorder p-4 rounded-lg">
+                            <h4 class="text-xs font-bold text-cyanAccent mb-1 uppercase">AndroidManifest Compliance</h4>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">Missing manifest files on zip structured archives blocks structural parsing and indicates incomplete, corrupted, or non-functional platform compilation architectures.</p>
+                        </div>
+                        <div class="bg-[#0b0e17] border border-panelBorder p-4 rounded-lg">
+                            <h4 class="text-xs font-bold text-cyanAccent mb-1 uppercase">Bytecode Executable Verification</h4>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">Lack of class layout directories or compiled bytecode files (such as classes.dex) on deployment packages signals atypical resource packaging structure layouts.</p>
+                        </div>
+                        <div class="bg-[#0b0e17] border border-panelBorder p-4 rounded-lg">
+                            <h4 class="text-xs font-bold text-cyanAccent mb-1 uppercase">Excess Native Object Modules</h4>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">High compilations of shared objects library collections (.so files) bypass system virtualization layers and may increase security exposure surfaces.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. ANALYTICS HUD VIEW -->
+            <div id="view-analytics" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">Integrity Analytics Spectrum</h3>
+                    <p class="text-xs text-gray-400 mb-6">Overview tracking typical entropy configurations processed across the sandbox runtime matrix.</p>
+                    <div class="space-y-4 max-w-xl">
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-gray-300">High Code Complexity / Packed Threshold (&gt; 7.2 Entropy)</span>
+                                <span class="text-redAccent font-semibold" id="analytics-high-count">0 Apps Scanned</span>
+                            </div>
+                            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                <div id="bar-entropy-high" class="h-full bg-redAccent transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-gray-300">Medium Complexity Indicator (6.0 - 7.2 Entropy)</span>
+                                <span class="text-amberAccent font-semibold" id="analytics-medium-count">0 Apps Scanned</span>
+                            </div>
+                            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                <div id="bar-entropy-medium" class="h-full bg-amberAccent transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-gray-300">Low Complexity / Open Structure (&lt; 6.0 Entropy)</span>
+                                <span class="text-greenAccent font-semibold" id="analytics-low-count">0 Apps Scanned</span>
+                            </div>
+                            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                <div id="bar-entropy-low" class="h-full bg-greenAccent transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. PRIVACY SANDBOX VIEW -->
+            <div id="view-privacy" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6 max-w-2xl">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">Zero-Transfer Policy Framework</h3>
+                    <p class="text-xs text-cyanAccent font-semibold mb-4">APPLICATION SECURITY ANALYSIS [ASAF] Sandbox Specifications</p>
+                    <p class="text-xs text-gray-300 leading-relaxed mb-4">
+                        Analysis requests are sent only to the local ASAF/MobSF backend configured for this installation. No third-party analysis service is required by this dashboard.
+                    </p>
+                    <ul class="space-y-2.5 text-xs text-gray-400">
+                        <li class="flex items-start gap-2">
+                            <span class="text-greenAccent font-bold">✔</span>
+                            <span>Application binaries are sent to the configured local ASAF/MobSF backend for security analysis; this dashboard does not send them to a third-party analysis service.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-greenAccent font-bold">✔</span>
+                            <span>Parsing tasks execute using local memory partitions via secure sandbox wrappers.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-greenAccent font-bold">✔</span>
+                            <span>Compliance indexes align directly with client-side analytical routines.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 8. API ACCESS VIEW -->
+            <div id="view-api" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">ASA Dev Terminal</h3>
+                    <p class="text-xs text-gray-400 mb-6">Use the existing ASAF/MobSF API locally. API credentials are intentionally not embedded in this source file.</p>
+                    <div class="bg-black/50 border border-panelBorder p-4 rounded-lg font-mono text-xs text-cyanAccent overflow-x-auto leading-relaxed">
+                        curl -X POST https://localhost:8443/api/v1/analyze-sandbox \<br>
+                        &nbsp;&nbsp;-H "Authorization: Bearer LOCAL_DEV_TOKEN_MOCK_XYZ" \<br>
+                        &nbsp;&nbsp;-F "file=@app_package_target.apk" \<br>
+                        &nbsp;&nbsp;-F "calculate_entropy=true"
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. SYSTEM ABOUT VIEW -->
+            <div id="view-about" class="view-panel hidden flex-grow">
+                <div class="bg-panel border border-panelBorder rounded-xl p-6 max-w-2xl">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-2">Platform Specifications</h3>
+                    <p class="text-xs text-gray-400 mb-4"><strong>APPLICATION SECURITY ANALYSIS [ASAF]</strong> operates as an independent, sandboxed mobile deployment integrity inspector.</p>
+                    <div class="grid grid-cols-2 gap-4 text-xs">
+                        <div class="bg-[#0b0e17] p-3 rounded border border-panelBorder">
+                            <span class="text-gray-500 uppercase block text-[9px] font-bold">Web Engine Core</span>
+                            <span class="text-white font-mono font-bold">v4.2.1-ASA</span>
+                        </div>
+                        <div class="bg-[#0b0e17] p-3 rounded border border-panelBorder">
+                            <span class="text-gray-500 uppercase block text-[9px] font-bold">Compression Engine</span>
+                            <span class="text-white font-mono font-bold">JSZip v3.10.1 Integration</span>
+                        </div>
+                        <div class="bg-[#0b0e17] p-3 rounded border border-panelBorder col-span-2">
+                            <span class="text-gray-500 uppercase block text-[9px] font-bold">Security Compliance Model</span>
+                            <span class="text-white">Static Complexity and Threat Profiling Module</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- DETAILED AUDIT MODAL -->
+    <div id="report-modal" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-panel border border-panelBorder rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl transition-all duration-300 scale-95 opacity-0" id="modal-content-card">
+            <div class="p-6 border-b border-panelBorder flex justify-between items-center shrink-0">
+                <h3 class="text-sm font-bold text-white uppercase tracking-wide flex items-center gap-2">
+                    <span>📋</span> Detailed Security Audit Analysis
+                </h3>
+                <button id="modal-close-btn" class="text-gray-400 hover:text-white transition-all text-lg font-bold">✕</button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6">
+                <!-- File Stats Grid -->
+                <div>
+                    <h4 class="text-xs font-bold text-cyanAccent uppercase tracking-wider mb-2">Binary Metadata Details</h4>
+                    <div class="grid grid-cols-2 gap-4 text-xs bg-[#0a0f1b] p-4 rounded-lg border border-panelBorder">
+                        <div>
+                            <span class="text-gray-500 block text-[9px] uppercase">Name</span>
+                            <span class="text-white font-semibold" id="modal-filename">--</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-[9px] uppercase">Size</span>
+                            <span class="text-white font-semibold" id="modal-size">--</span>
+                        </div>
+                        <div class="col-span-2">
+                            <span class="text-gray-500 block text-[9px] uppercase">SHA-256 Digest Signature</span>
+                            <span class="text-white font-mono break-all leading-tight text-[10px]" id="modal-sha256">--</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-[9px] uppercase">Calculated Entropy</span>
+                            <span class="text-white font-mono font-semibold" id="modal-entropy">--</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 block text-[9px] uppercase">Internal Directory Parsing</span>
+                            <span class="text-white font-semibold" id="modal-zip">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Structured Internal File Counts -->
+                <div>
+                    <h4 class="text-xs font-bold text-cyanAccent uppercase tracking-wider mb-2">Extracted Directories & Code Layers</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-xs">
+                        <div class="bg-[#0a0f1b] p-3 rounded-lg border border-panelBorder">
+                            <span class="text-gray-500 block text-[9px] uppercase mb-1">AndroidManifest.xml</span>
+                            <span class="font-bold text-[11px]" id="modal-manifest">--</span>
+                        </div>
+                        <div class="bg-[#0a0f1b] p-3 rounded-lg border border-panelBorder">
+                            <span class="text-gray-500 block text-[9px] uppercase mb-1">classes.dex</span>
+                            <span class="font-bold text-[11px]" id="modal-dex">--</span>
+                        </div>
+                        <div class="bg-[#0a0f1b] p-3 rounded-lg border border-panelBorder">
+                            <span class="text-gray-500 block text-[9px] uppercase mb-1">Native Libraries (.so)</span>
+                            <span class="font-bold text-[11px]" id="modal-so-count">--</span>
+                        </div>
+                        <div class="bg-[#0a0f1b] p-3 rounded-lg border border-panelBorder">
+                            <span class="text-gray-500 block text-[9px] uppercase mb-1">Resources & Assets</span>
+                            <span class="font-bold text-[11px]" id="modal-assets-count">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deductions Ledger -->
+                <div>
+                    <h4 class="text-xs font-bold text-cyanAccent uppercase tracking-wider mb-2">Static Security Deductions Ledgers</h4>
+                    <div class="bg-[#0a0f1b] border border-panelBorder p-4 rounded-lg font-mono text-[11px] text-gray-300">
+                        <p class="font-bold text-gray-400 border-b border-panelBorder pb-1.5 mb-2 uppercase">Backend Finding Evidence:</p>
+                        <div class="space-y-2.5" id="modal-deductions-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-panelBorder flex flex-wrap justify-end gap-2 shrink-0">
+                <button id="download-pdf-btn" class="px-4 py-2 rounded-lg bg-cyanAccent/10 text-cyanAccent hover:bg-cyanAccent/20 font-bold text-xs uppercase tracking-wider transition-all">Download PDF</button>
+                <button id="download-word-btn" class="px-4 py-2 rounded-lg bg-purpleAccent/10 text-purpleAccent hover:bg-purpleAccent/20 font-bold text-xs uppercase tracking-wider transition-all">Download Word</button>
+                <button id="modal-close-footer" class="px-5 py-2 rounded-lg bg-panelBorder text-white hover:bg-white/10 font-bold text-xs uppercase tracking-wider transition-all">Close Details</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DYNAMIC SCANNING JAVASCRIPT -->
+    <script>
+        // NAVIGATION VIEWS MANAGER
+        const navBtns = document.querySelectorAll('.nav-btn');
+        const viewPanels = document.querySelectorAll('.view-panel');
+
+        function activateNavView(viewName) {
+            navBtns.forEach(btn => {
+                const targetView = btn.getAttribute('data-view');
+                if (targetView === viewName) {
+                    btn.className = "nav-btn active-btn w-full flex items-center space-x-3 px-4 py-2.5 bg-blueAccent/10 border border-blueAccent/30 text-white rounded-lg transition-all text-xs font-semibold";
+                } else {
+                    btn.className = "nav-btn w-full flex items-center space-x-3 px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-xs";
+                }
+            });
+
+            viewPanels.forEach(panel => {
+                const panelId = panel.id;
+                if (panelId === `view-${viewName}`) {
+                    panel.classList.remove('hidden');
+                } else {
+                    panel.classList.add('hidden');
+                }
+            });
+        }
+
+        navBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const viewName = btn.getAttribute('data-view');
+                if (viewName) activateNavView(viewName);
+            });
+        });
+
+        // 3D FLOATING & INTERACTABLE NODE NETWORK CANVAS
+        // Wrapped in try/catch so a failure here (e.g. canvas unsupported in an
+        // embedded webview) can never block the feature buttons initialized below.
+        try {
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let points = [];
+        const numPoints = 65;
+        let mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        // Initialize points with depth value (z) for 3D simulation
+        function init3DPoints() {
+            points = [];
+            for (let i = 0; i < numPoints; i++) {
+                points.push({
+                    x: (Math.random() - 0.5) * 1400,
+                    y: (Math.random() - 0.5) * 1400,
+                    z: Math.random() * 900 + 100, // 3D Depth
+                    radius: Math.random() * 1.5 + 1
+                });
+            }
+        }
+
+        // Mouse motion tracker with dynamic interpolation
+        window.addEventListener('pointermove', (e) => {
+            mouse.targetX = (e.clientX - window.innerWidth / 2) * 0.15;
+            mouse.targetY = (e.clientY - window.innerHeight / 2) * 0.15;
+        });
+
+        function animate3DNetwork() {
+            if (prefersReducedMotion.matches) {
+                drawStaticBg();
+                return;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Interpolate mouse positioning for fluid cinematic inertia
+            mouse.x += (mouse.targetX - mouse.x) * 0.08;
+            mouse.y += (mouse.targetY - mouse.y) * 0.08;
+
+            const fov = 350; // Camera Field of view
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            // Update & project 3D points
+            const screenPoints = [];
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                
+                // Drift points closer to camera view over time
+                p.z -= 1.25;
+                if (p.z <= 10) {
+                    p.z = 1000; // Reset point depth to background
+                    p.x = (Math.random() - 0.5) * 1400;
+                    p.y = (Math.random() - 0.5) * 1400;
+                }
+
+                // Project 3D coordinate space onto 2D viewport plane with mouse parallax offsets
+                const scale = fov / (p.z);
+                const sx = (p.x + mouse.x) * scale + cx;
+                const sy = (p.y + mouse.y) * scale + cy;
+
+                screenPoints.push({ sx, sy, scale, z: p.z });
+
+                // Render points inside viewport bounds
+                if (sx >= 0 && sx <= canvas.width && sy >= 0 && sy <= canvas.height) {
+                    const opacity = Math.min(1.0, (1000 - p.z) / 400) * 0.45;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, p.radius * scale * 0.5, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 217, 255, ${opacity})`;
+                    ctx.fill();
+                }
+            }
+
+            // Draw link matrices between neighboring projected points
+            for (let i = 0; i < screenPoints.length; i++) {
+                const p1 = screenPoints[i];
+                for (let j = i + 1; j < screenPoints.length; j++) {
+                    const p2 = screenPoints[j];
+                    
+                    const dx = p1.sx - p2.sx;
+                    const dy = p1.sy - p2.sy;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    // Connect spatial points close to each other
+                    if (dist < 100) {
+                        const opacity = (1 - dist / 100) * 0.12 * Math.min(1.0, (1000 - p1.z) / 400);
+                        ctx.beginPath();
+                        ctx.moveTo(p1.sx, p1.sy);
+                        ctx.lineTo(p2.sx, p2.sy);
+                        ctx.strokeStyle = `rgba(0, 217, 255, ${opacity})`;
+                        ctx.lineWidth = 0.65;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            requestAnimationFrame(animate3DNetwork);
+        }
+
+        function drawStaticBg() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < numPoints; i++) {
+                const x = (i % 8) * (canvas.width / 7);
+                const y = Math.floor(i / 8) * (canvas.height / 7);
+                ctx.beginPath();
+                ctx.arc(x, y, 1.2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 217, 255, 0.08)';
+                ctx.fill();
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        init3DPoints();
+        animate3DNetwork();
+        } catch (bgErr) {
+            console.error('Background canvas failed to initialize (non-fatal):', bgErr);
+        }
+
+
+        // Backend scorecard findings may be returned as arrays (MobSF-style),
+        // objects, or numeric totals. Normalize all three forms so the dashboard
+        // never displays 0 just because the response shape changed.
+        function countBackendFindingValue(value) {
+            if (Array.isArray(value)) return value.length;
+            if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, value);
+            if (value && typeof value === 'object') return Object.keys(value).length;
+            return 0;
+        }
+
+        function getBackendFindingsContainer(data = backendReportData) {
+            if (!data || typeof data !== 'object') return {};
+
+            // MobSF/ASAF scorecard responses may return the severity buckets
+            // directly at the root: { high: [...], warning: [...], ... }.
+            // Other deployments wrap the same buckets in `findings`.
+            const wrapped = data.findings;
+            if (wrapped && typeof wrapped === 'object') return wrapped;
+
+            const result = data.results;
+            if (result && typeof result === 'object' && result.findings && typeof result.findings === 'object') {
+                return result.findings;
+            }
+
+            const dataNode = data.data;
+            if (dataNode && typeof dataNode === 'object' && dataNode.findings && typeof dataNode.findings === 'object') {
+                return dataNode.findings;
+            }
+
+            return data;
+        }
+
+        function getBackendFindingBucket(category) {
+            const findings = getBackendFindingsContainer();
+            if (!findings || typeof findings !== 'object') return null;
+
+            const normalized = String(category).toLowerCase();
+            const aliases = [
+                normalized,
+                String(category).toUpperCase(),
+                String(category),
+                String(category).charAt(0).toUpperCase() + String(category).slice(1).toLowerCase()
+            ];
+
+            for (const key of aliases) {
+                if (Object.prototype.hasOwnProperty.call(findings, key)) {
+                    return findings[key];
+                }
+            }
+            return null;
+        }
+
+        function backendCount(category) {
+            return countBackendFindingValue(getBackendFindingBucket(category));
+        }
+
+        function renderBackendFindingSummary() {
+            const counts = {
+                high: backendCount('high'),
+                warning: backendCount('warning'),
+                info: backendCount('info'),
+                hotspot: backendCount('hotspot'),
+                secure: backendCount('secure')
+            };
+            Object.entries(counts).forEach(([key, value]) => {
+                const el = document.getElementById(`finding-${key}`);
+                if (el) el.innerText = value;
+            });
+            const total = Object.values(counts).reduce((a,b) => a+b, 0);
+            const status = document.getElementById('backend-summary-status');
+            if (status) status.innerText = total ? `${total} CATEGORIZED FINDINGS` : 'NO CATEGORIZED FINDINGS';
+        }
+
+        async function loadServerScanHistory() {
+            if (!BACKEND_API_KEY) return;
+            try {
+                const resp = await fetch('/api/v1/scans?page=1&page_size=25', {
+                    headers: { 'Authorization': BACKEND_API_KEY, 'X-Mobsf-Api-Key': BACKEND_API_KEY },
+                    cache: 'no-store'
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const rows = Array.isArray(data)
+                    ? data
+                    : (data.scans || data.results || data.data || []);
+                if (!Array.isArray(rows) || !rows.length) return;
+
+                const appBody = document.getElementById('app-database-body');
+                const repBody = document.getElementById('reports-database-body');
+                appBody.innerHTML = '';
+                repBody.innerHTML = '';
+
+                rows.forEach((item) => {
+                    const name = item.FILE_NAME || item.file_name || item.APP_NAME || item.app_name || 'Unknown';
+                    const md5 = item.MD5 || item.md5 || item.hash || '';
+                    const timestamp = item.TIMESTAMP || item.timestamp || '';
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-panelBorder hover:bg-white/5';
+                    row.innerHTML = `
+                        <td class="py-3 px-4 font-bold text-white truncate max-w-[220px]">${escapeHtml(name)}</td>
+                        <td class="py-3 px-4 text-gray-400 font-mono">${escapeHtml(timestamp || '—')}</td>
+                        <td class="py-3 px-4 text-gray-400 font-mono">${escapeHtml(md5 || '—')}</td>
+                        <td class="py-3 px-4 text-cyanAccent">${md5 ? 'AVAILABLE' : '—'}</td>
+                        <td class="py-3 px-4"><span class="text-[9px] font-bold text-greenAccent">SERVER HISTORY</span></td>
+                    `;
+                    appBody.appendChild(row);
+
+                    const rep = document.createElement('tr');
+                    rep.className = 'border-b border-panelBorder hover:bg-white/5';
+                    rep.innerHTML = `
+                        <td class="py-3 px-4 font-mono text-cyanAccent">${escapeHtml(md5 ? md5.substring(0,16) + '...' : '—')}</td>
+                        <td class="py-3 px-4 text-gray-300">${escapeHtml(name)}</td>
+                        <td class="py-3 px-4 text-gray-400">${escapeHtml(timestamp || '—')}</td>
+                        <td class="py-3 px-4">${md5 ? `<a class="text-cyanAccent underline" href="/${encodeURIComponent(item.ANALYZER || item.analyzer || 'static_analyzer')}/${encodeURIComponent(md5)}/">Open Scan</a>` : '—'}</td>
+                    `;
+                    repBody.appendChild(rep);
+                });
+            } catch (err) {
+                console.warn('Server scan history unavailable:', err);
+            }
+        }
+
+        // COMPLIANCE RUNTIME DATA
+        let activeAudit = null;
+        let backendReportData = null;
+        let sessionRegistry = [];
+
+        // ============================================================
+        // REAL BACKEND INTEGRATION
+        // This page is served by your Django security-analysis server, so relative
+        // paths like /api/v1/upload hit the same server automatically.
+        // NOTE: the API key below is visible to anyone who views this
+        // page's source. Fine for local/dev use on your own machine —
+        // rotate the key or move this server-side before deploying
+        // anywhere public.
+        // ============================================================
+        // Django injects the current local MobSF API key at render time.
+        // No API key is hard-coded into the GitHub source.
+        window.ASA_API_KEY = "{{ api_key|escapejs }}";
+
+        const BACKEND_API_KEY =
+            window.ASA_API_KEY ||
+            document.querySelector('meta[name="asaf-api-key"]')?.content ||
+            '';
+
+        function requireApiKey() {
+            if (!BACKEND_API_KEY) {
+                throw new Error(
+                    'ASAF API key is not configured. Set window.ASA_API_KEY in your local environment/template; do not commit the key to GitHub.'
+                );
+            }
+        }
+
+        function mapFindingsToDeductions(findings) {
+            const deductions = [];
+            if (!findings || typeof findings !== 'object') return deductions;
+
+            // Accept either the raw scorecard object or its nested findings object.
+            const sourceFindings = findings.findings && typeof findings.findings === 'object'
+                ? findings.findings
+                : findings;
+
+            Object.entries(sourceFindings).forEach(([severity, items]) => {
+                if (items === null || items === undefined) return;
+
+                const entries = Array.isArray(items)
+                    ? items.map((value, index) => [String(index), value])
+                    : (typeof items === 'object' ? Object.entries(items) : []);
+
+                entries.forEach(([key, val]) => {
+                    if (val === null || val === undefined) return;
+
+                    const source = (val && typeof val === 'object') ? val : {};
+                    const metadata = source.metadata && typeof source.metadata === 'object' ? source.metadata : {};
+                    const title = source.title || metadata.title || source.name || metadata.name || key;
+                    const desc = source.description || metadata.description || source.details || metadata.details || source.info || metadata.info || '';
+                    const numericDeduction = Number.isFinite(Number(source.deduction))
+                        ? Number(source.deduction)
+                        : (Number.isFinite(Number(metadata.deduction)) ? Number(metadata.deduction) : null);
+
+                    deductions.push({
+                        rule: String(title),
+                        metric: String(severity).toUpperCase(),
+                        deduction: numericDeduction,
+                        description: String(desc || 'Backend finding returned without an individual numeric deduction.')
+                    });
+                });
+            });
+            return deductions;
+        }
+
+        // Dynamic Elements
+        const fileInput = document.getElementById('file-upload');
+        const uploadBtn = document.getElementById('upload-btn');
+        const uploadPanel = document.getElementById('upload-panel');
+        const dropZone = document.getElementById('drop-zone');
+        const dropText = document.getElementById('drop-text');
+
+        const scanPlaceholder = document.getElementById('scan-placeholder');
+        const scanResults = document.getElementById('scan-results');
+        const antivirusScanMonitor = document.getElementById('antivirus-scan-monitor');
+        const consoleLogs = document.getElementById('console-logs');
+        const scanProgressBar = document.getElementById('scan-progress-bar');
+        const scanProgressPercentage = document.getElementById('scan-progress-percentage');
+        const activeScanningFilename = document.getElementById('active-scanning-filename');
+
+        // Results Summary Elements
+        const resFilename = document.getElementById('res-filename');
+        const resFilesize = document.getElementById('res-filesize');
+        const resSha256 = document.getElementById('res-sha256');
+        const resEntropy = document.getElementById('res-entropy');
+        const resRiskBadge = document.getElementById('res-risk-badge');
+        const resSoStatus = document.getElementById('res-so-status');
+        const resSoIndicator = document.getElementById('res-so-indicator');
+
+        // Score interface
+        const scoreVal = document.getElementById('score-val');
+        const scoreRing = document.getElementById('score-ring');
+        const scoreSubtext = document.getElementById('score-subtext');
+        const checkItems = document.querySelectorAll('.check-item');
+        const statusTitle = document.getElementById('status-title');
+        const statusDesc = document.getElementById('status-desc');
+
+        // Modal triggers
+        const viewReportBtn = document.getElementById('view-report-btn');
+        const resetSummaryBtn = document.getElementById('reset-summary-btn');
+        const reportModal = document.getElementById('report-modal');
+        const modalContentCard = document.getElementById('modal-content-card');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const modalCloseFooter = document.getElementById('modal-close-footer');
+        const downloadPdfBtn = document.getElementById('download-pdf-btn');
+        const downloadWordBtn = document.getElementById('download-word-btn');
+        let activeScanHash = null;
+        const copyHashBtn = document.getElementById('copy-hash-btn');
+
+        // Setup drop bindings
+        uploadBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        dropZone?.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput?.addEventListener('change', function() {
+            if (this.files && this.files.length > 0) {
+                handleIncomingFiles(this.files);
+            }
+        });
+
+        dropZone?.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drop-active');
+        });
+        dropZone?.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drop-active');
+        });
+        dropZone?.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drop-active');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleIncomingFiles(e.dataTransfer.files);
+            }
+        });
+
+        // ============================================================
+        // NEW FEATURE: BATCH SCAN QUEUE (multi-file scanning)
+        // ============================================================
+        // Purely additive: if exactly one file comes in, behavior is
+        // 100% identical to before (calls processAndAnalyzeFile directly,
+        // untouched). If 2+ files come in at once (multi-select or
+        // multi-file drag & drop), they are queued and scanned one after
+        // another automatically, reusing the existing single-file scan
+        // pipeline and existing PDF/Word report functions for each result.
+        let batchQueue = [];
+        let batchQueueRunning = false;
+
+        function handleIncomingFiles(fileList) {
+            const files = Array.from(fileList || []);
+            if (files.length === 0) return;
+
+            if (files.length === 1 && batchQueue.length === 0 && !batchQueueRunning) {
+                // Exact original single-file behavior, unchanged.
+                processAndAnalyzeFile(files[0]);
+                return;
+            }
+
+            files.forEach(file => {
+                batchQueue.push({ file, status: 'queued', result: null, error: null });
+            });
+            renderBatchQueue();
+            runBatchQueue();
+        }
+
+        function renderBatchQueue() {
+            const panel = document.getElementById('batch-queue-panel');
+            const list = document.getElementById('batch-queue-list');
+            const counter = document.getElementById('batch-queue-counter');
+            if (!panel || !list || !counter) return;
+
+            if (batchQueue.length === 0) {
+                panel.classList.add('hidden');
+                return;
+            }
+            panel.classList.remove('hidden');
+
+            const doneCount = batchQueue.filter(i => i.status === 'done' || i.status === 'failed').length;
+            counter.innerText = `${doneCount} / ${batchQueue.length} done`;
+
+            list.innerHTML = batchQueue.map((item, idx) => {
+                const name = escapeHtml(item.file.name);
+                const sizeKb = (item.file.size / 1024).toFixed(1);
+                let statusBadge = '';
+                let actions = '';
+
+                if (item.status === 'queued') {
+                    statusBadge = `<span class="text-[9px] font-bold px-2 py-0.5 rounded uppercase bg-white/5 text-gray-400 border border-panelBorder">Queued</span>`;
+                } else if (item.status === 'scanning') {
+                    statusBadge = `<span class="text-[9px] font-bold px-2 py-0.5 rounded uppercase bg-cyanAccent/10 text-cyanAccent border border-cyanAccent/30 animate-pulse">Scanning...</span>`;
+                } else if (item.status === 'done') {
+                    const score = item.result?.score ?? 'N/A';
+                    statusBadge = `<span class="text-[9px] font-bold px-2 py-0.5 rounded uppercase bg-greenAccent/10 text-greenAccent border border-greenAccent/30">Done \u2014 ${score}/100</span>`;
+                    actions = `
+                        <button data-batch-pdf="${idx}" class="text-[9px] font-bold px-2 py-1 rounded bg-panelBorder text-white hover:bg-white/10 uppercase">PDF</button>
+                        <button data-batch-word="${idx}" class="text-[9px] font-bold px-2 py-1 rounded bg-panelBorder text-white hover:bg-white/10 uppercase">Word</button>
+                    `;
+                } else if (item.status === 'failed') {
+                    statusBadge = `<span class="text-[9px] font-bold px-2 py-0.5 rounded uppercase bg-redAccent/10 text-redAccent border border-redAccent/30">Failed</span>`;
+                }
+
+                return `
+                    <div class="flex items-center justify-between gap-3 bg-[#0b0e17] border border-panelBorder p-2.5 rounded-lg">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-white text-xs font-semibold truncate" title="${name}">${name}</p>
+                            <p class="text-gray-500 text-[10px]">${sizeKb} KB</p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            ${statusBadge}
+                            ${actions}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            list.querySelectorAll('[data-batch-pdf]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const item = batchQueue[Number(btn.getAttribute('data-batch-pdf'))];
+                    if (item?.result) handleReportDownload('pdf', item.result, btn);
+                });
+            });
+            list.querySelectorAll('[data-batch-word]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const item = batchQueue[Number(btn.getAttribute('data-batch-word'))];
+                    if (item?.result) handleReportDownload('word', item.result, btn);
+                });
+            });
+        }
+
+        async function runBatchQueue() {
+            if (batchQueueRunning) return;
+            batchQueueRunning = true;
+            try {
+                let next;
+                while ((next = batchQueue.find(i => i.status === 'queued'))) {
+                    next.status = 'scanning';
+                    renderBatchQueue();
+                    try {
+                        await processAndAnalyzeFile(next.file);
+                        // processAndAnalyzeFile sets the shared `activeAudit`
+                        // on success; snapshot it into this queue row so it
+                        // survives even after the next file overwrites it.
+                        next.result = activeAudit;
+                        next.status = activeAudit ? 'done' : 'failed';
+                    } catch (err) {
+                        next.status = 'failed';
+                        next.error = err?.message || 'Scan failed';
+                    }
+                    renderBatchQueue();
+                }
+            } finally {
+                batchQueueRunning = false;
+            }
+        }
+
+        // HASH CALCULATION
+        async function calculateSHA256(arrayBuffer) {
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // ENTROPY MATH (0-8 scaling)
+        function calculateShannonEntropy(arrayBuffer) {
+            const len = arrayBuffer.byteLength;
+            if (len === 0) return 0;
+            const uint8 = new Uint8Array(arrayBuffer);
+            const freqs = new Uint32Array(256);
+            
+            for (let i = 0; i < len; i++) {
+                freqs[uint8[i]]++;
+            }
+            
+            let entropy = 0;
+            for (let i = 0; i < 256; i++) {
+                if (freqs[i] > 0) {
+                    const p = freqs[i] / len;
+                    entropy -= p * Math.log2(p);
+                }
+            }
+            return entropy;
+        }
+
+        // COMPRESSION EXTRACTOR
+        async function unpackBinaryArchive(arrayBuffer) {
+            const uint8 = new Uint8Array(arrayBuffer.slice(0, 4));
+            const isZip = uint8[0] === 0x50 && uint8[1] === 0x4B && uint8[2] === 0x03 && uint8[3] === 0x04;
+
+            const structuralManifest = {
+                isZip: isZip,
+                fileCount: 0,
+                hasManifest: false,
+                hasClassesDex: false,
+                soCount: 0,
+                nativeFiles: [],
+                assetsCount: 0,
+                resCount: 0,
+                filesList: [],
+                error: null
+            };
+
+            if (!isZip) return structuralManifest;
+
+            try {
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                const fileKeys = Object.keys(zip.files);
+                structuralManifest.fileCount = fileKeys.length;
+                structuralManifest.filesList = fileKeys;
+                
+                zip.forEach((path, file) => {
+                    const nameLower = path.toLowerCase();
+                    if (nameLower === "androidmanifest.xml") {
+                        structuralManifest.hasManifest = true;
+                    }
+                    if (nameLower === "classes.dex" || nameLower.endsWith("/classes.dex")) {
+                        structuralManifest.hasClassesDex = true;
+                    }
+                    if (nameLower.endsWith(".so")) {
+                        structuralManifest.soCount++;
+                        structuralManifest.nativeFiles.push(path);
+                    }
+                    if (path.startsWith("assets/")) {
+                        structuralManifest.assetsCount++;
+                    }
+                    if (path.startsWith("res/")) {
+                        structuralManifest.resCount++;
+                    }
+                });
+            } catch (err) {
+                structuralManifest.error = err.message;
+            }
+
+            return structuralManifest;
+        }
+
+        // SECURITY SCORE
+        // The backend scorecard is the single source of truth.
+        // No client-side score is calculated here.
+
+        // REAL BACKEND SCAN LOG STREAM
+        // The backend records the same scan stages that are written to the
+        // server console. The UI polls /api/v1/scan_logs so it never invents
+        // fake APK filenames or fake progress messages.
+        let lastBackendLogCount = 0;
+        let backendLogTimer = null;
+
+        function renderBackendLogs(logs) {
+            if (!Array.isArray(logs)) return;
+            if (logs.length < lastBackendLogCount) {
+                consoleLogs.innerHTML = '';
+                lastBackendLogCount = 0;
+            }
+            for (let i = lastBackendLogCount; i < logs.length; i++) {
+                const entry = logs[i] || {};
+                const p = document.createElement('p');
+                const stamp = entry.timestamp ? `[${entry.timestamp}] ` : '';
+                const prefix = entry.status === 'init' ? '[INIT] ' : '[SCAN] ';
+                p.textContent = `${stamp}${prefix}${entry.status || 'Scan event'}${entry.exception ? ` — ${entry.exception}` : ''}`;
+                consoleLogs.appendChild(p);
+            }
+            lastBackendLogCount = logs.length;
+            consoleLogs.scrollTop = consoleLogs.scrollHeight;
+            if (logs.length) {
+                const latest = logs[logs.length - 1];
+                activeScanningFilename.innerText = latest?.status || 'Backend analysis running...';
+            }
+        }
+
+        async function pollRealScanLogs(scanHash) {
+            requireApiKey();
+            clearInterval(backendLogTimer);
+            lastBackendLogCount = 0;
+            consoleLogs.innerHTML = '';
+            const poll = async () => {
+                try {
+                    const resp = await fetch('/api/v1/scan_logs', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': BACKEND_API_KEY,
+                            'X-Mobsf-Api-Key': BACKEND_API_KEY,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams({ hash: scanHash }),
+                        cache: 'no-store'
+                    });
+                    if (!resp.ok) {
+                        // 400 means the backend has not persisted the first log yet.
+                        // Keep polling instead of treating it as a scan failure.
+                        if (resp.status !== 400) console.warn('Scan log endpoint:', resp.status);
+                        return;
+                    }
+                    const data = await resp.json();
+                    renderBackendLogs(data.logs || []);
+                } catch (e) {
+                    console.warn('Unable to read backend scan logs:', e);
+                }
+            };
+            await poll();
+            backendLogTimer = setInterval(poll, 700);
+        }
+
+        // CORE PIPELINE PROCESSOR
+        async function processAndAnalyzeFile(file) {
+            // Lock dashboard options
+            uploadBtn.disabled = true;
+            dropZone.style.pointerEvents = 'none';
+            dropText.innerText = "Decompressing data buffers...";
+
+            // Hide old stats, show dynamic log console
+            scanPlaceholder.classList.add('hidden');
+            scanResults.classList.add('hidden');
+            antivirusScanMonitor.classList.remove('hidden');
+            
+            consoleLogs.innerHTML = '';
+            resetChecklistUI();
+            updateDashboardStatus("READING...", "Acquiring file byte arrays for sandbox decompilation...", "text-cyanAccent animate-pulse");
+
+            try {
+                // Read local binary file
+                const fileReader = new FileReader();
+                const arrayBufferPromise = new Promise((resolve, reject) => {
+                    fileReader.onload = () => resolve(fileReader.result);
+                    fileReader.onerror = () => reject(fileReader.error);
+                });
+                fileReader.readAsArrayBuffer(file);
+                const arrayBuffer = await arrayBufferPromise;
+                markChecklistIndex(0, true);
+
+                // Cryptographic Digests
+                const hashValue = await calculateSHA256(arrayBuffer);
+                const entropyValue = calculateShannonEntropy(arrayBuffer);
+                markChecklistIndex(1, true);
+
+                // Load ZIP Structures
+                const zipMetadata = await unpackBinaryArchive(arrayBuffer);
+                markChecklistIndex(2, true);
+
+                // Calculate calculations
+                const evaluationMetrics = { score: 0, deductions: [] }; // Backend score is authoritative.
+
+                // REAL BACKEND ANALYSIS
+                // Do not simulate a local antivirus sweep. Start the actual
+                // backend scan and stream its persisted scan log entries.
+                markChecklistIndex(3, false);
+                updateDashboardStatus(
+                    "SCANNING WITH BACKEND...",
+                    "Real APK analysis is running. The diagnostics panel is reading the same scan events recorded by the server.",
+                    "text-cyanAccent animate-pulse"
+                );
+                scanProgressBar.style.width = '8%';
+                scanProgressPercentage.innerText = 'ANALYZING';
+                activeScanningFilename.innerText = 'Waiting for backend scan events...';
+
+                let realScanFailed = false;
+                let realScanErrorMsg = '';
+                let uploadData = null;
+
+                try {
+                    // Upload + start the real scan. On installations with
+                    // ASYNC_ANALYSIS enabled, this returns while the worker
+                    // continues; scan_logs is then polled below.
+                    requireApiKey();
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const uploadResp = await fetch('/api/v1/upload', {
+                        method: 'POST',
+                        headers: { 'Authorization': BACKEND_API_KEY, 'X-Mobsf-Api-Key': BACKEND_API_KEY },
+                        body: formData
+                    });
+                    if (!uploadResp.ok) throw new Error(`Backend upload failed (HTTP ${uploadResp.status})`);
+                    uploadData = await uploadResp.json();
+                    activeScanHash = uploadData.hash || null;
+                    if (!uploadData.hash) throw new Error(uploadData.error || 'Backend rejected this file.');
+
+                    // Start the real MobSF/ASAF analysis first.
+                    // Scan-log polling starts only after /scan has accepted the job.
+                    const scanResp = await fetch('/api/v1/scan', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': BACKEND_API_KEY,
+                            'X-Mobsf-Api-Key': BACKEND_API_KEY,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams({
+                            scan_type: uploadData.scan_type,
+                            file_name: uploadData.file_name,
+                            hash: uploadData.hash
+                        })
+                    });
+                    if (!scanResp.ok) {
+                        let detail = '';
+                        try { detail = (await scanResp.json()).error || ''; } catch (_) {}
+                        throw new Error(detail || `Backend scan failed (HTTP ${scanResp.status})`);
+                    }
+
+                    // Stream the persisted backend scan events after the scan starts.
+                    await pollRealScanLogs(uploadData.hash);
+
+                    // /scan can be asynchronous. Do not request the scorecard until
+                    // the server's scan log shows the final database-save stage.
+                    // This prevents a valid scan from being treated as an empty or
+                    // partially populated scorecard.
+                    async function waitForBackendScanCompletion(scanHash, timeoutMs = 10 * 60 * 1000) {
+                        const startedAt = Date.now();
+                        let lastSignature = '';
+
+                        while (Date.now() - startedAt < timeoutMs) {
+                            try {
+                                const logResp = await fetch('/api/v1/scan_logs', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': BACKEND_API_KEY,
+                                        'Content-Type': 'application/x-www-form-urlencoded'
+                                    },
+                                    body: new URLSearchParams({ hash: scanHash }),
+                                    cache: 'no-store'
+                                });
+
+                                if (logResp.ok) {
+                                    const logData = await logResp.json();
+                                    const logs = Array.isArray(logData.logs) ? logData.logs : [];
+                                    renderBackendLogs(logs);
+
+                                    const signature = JSON.stringify(logs);
+                                    if (signature !== lastSignature) {
+                                        lastSignature = signature;
+                                        const pct = Math.min(92, 12 + logs.length * 2);
+                                        scanProgressBar.style.width = `${pct}%`;
+                                        scanProgressPercentage.innerText = `${pct}%`;
+                                    }
+
+                                    const text = logs.map(entry => String(entry?.status || '')).join(' | ');
+                                    const completed = /(saving to database|saved to database|scan completed|analysis completed|analysis complete|scan finished)/i.test(text);
+                                    const failed = /(scan failed|analysis failed|exception during scan|fatal error)/i.test(text);
+
+                                    if (failed) {
+                                        throw new Error('Backend analysis reported a failure in the scan log.');
+                                    }
+
+                                    if (completed) {
+                                        // Allow the final database transaction to settle.
+                                        await new Promise(r => setTimeout(r, 1500));
+                                        return;
+                                    }
+                                }
+                            } catch (pollErr) {
+                                if (pollErr instanceof Error && /reported a failure/.test(pollErr.message)) throw pollErr;
+                            }
+
+                            await new Promise(r => setTimeout(r, 1200));
+                        }
+
+                        throw new Error('Timed out waiting for the backend scan to finish. Check the server scan logs.');
+                    }
+
+                    await waitForBackendScanCompletion(uploadData.hash);
+
+                    // Fetch the authoritative scorecard only after the scan has
+                    // completed and its result has been persisted.
+                    const scoreResp = await fetch('/api/v1/scorecard', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': BACKEND_API_KEY,
+                            'X-Mobsf-Api-Key': BACKEND_API_KEY,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams({ hash: uploadData.hash })
+                    });
+                    if (!scoreResp.ok) throw new Error(`Scorecard failed (HTTP ${scoreResp.status}). Check the ASAF API key and completed scan state.`);
+                    const scoreData = await scoreResp.json();
+                    backendReportData = scoreData;
+
+                    // scorecard is compact; load the full report for manifest permissions.
+                    try {
+                        const reportResp = await fetch('/api/v1/report_json', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': BACKEND_API_KEY,
+                                'X-Mobsf-Api-Key': BACKEND_API_KEY,
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: new URLSearchParams({ hash: uploadData.hash }),
+                            cache: 'no-store'
+                        });
+                        const reportText = await reportResp.text();
+                        let reportPayload = null;
+                        try { reportPayload = JSON.parse(reportText); } catch (_) {}
+                        if (reportResp.ok && reportPayload) {
+                            const reportData = reportPayload.report_dat || reportPayload.report_data || reportPayload.report || reportPayload.data || reportPayload;
+                            backendReportData = Object.assign({}, scoreData, { report_json: reportPayload, report_data: reportData });
+                            console.log('=== ASAF DEBUG: FULL REPORT JSON LOADED ===', reportResp.status);
+                        } else {
+                            console.warn('=== ASAF DEBUG: REPORT JSON FAILED ===', reportResp.status, reportText.slice(0, 500));
+                        }
+                    } catch (reportErr) {
+                        console.warn('=== ASAF DEBUG: REPORT JSON ERROR ===', reportErr);
+                    }
+
+                    console.log('=== ASAF DEBUG: RAW SCORECARD RESPONSE ===');
+                    console.log(JSON.stringify(scoreData, null, 2));
+                    console.log('=== END ASAF DEBUG ===');
+                    // Keep the raw response in the browser console for diagnostics,
+                    // but never interrupt a completed scan with a blocking popup.
+                    renderBackendFindingSummary();
+
+                    // Final log refresh and stop polling.
+                    await new Promise(r => setTimeout(r, 500));
+                    clearInterval(backendLogTimer);
+                    try {
+                        const finalLogs = await fetch('/api/v1/scan_logs', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': BACKEND_API_KEY,
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: new URLSearchParams({ hash: uploadData.hash }),
+                            cache: 'no-store'
+                        });
+                        if (finalLogs.ok) renderBackendLogs((await finalLogs.json()).logs || []);
+                    } catch (_) {}
+
+                    if (typeof scoreData.security_score === 'number') {
+                        evaluationMetrics.score = scoreData.security_score;
+                    }
+                    const realDeductions = mapFindingsToDeductions(getBackendFindingsContainer(scoreData));
+                    if (realDeductions.length > 0) evaluationMetrics.deductions = realDeductions;
+                    markChecklistIndex(3, true);
+                    scanProgressBar.style.width = '100%';
+                    scanProgressPercentage.innerText = '100%';
+                    updateDashboardStatus("ANALYSIS COMPLETE", "Real backend security analysis completed successfully.", "text-greenAccent");
+                    refreshPermissionDashboard();
+                } catch (err) {
+                    clearInterval(backendLogTimer);
+                    console.error('Real backend scan failed:', err);
+                    realScanFailed = true;
+                    realScanErrorMsg = err.message || 'Could not reach the backend.';
+                    markChecklistIndex(3, false);
+                    scanProgressPercentage.innerText = 'FAILED';
+                    updateDashboardStatus("SCAN FAILED", realScanErrorMsg, "text-redAccent");
+                    const p = document.createElement('p');
+                    p.textContent = `[ERROR] ${realScanErrorMsg}`;
+                    p.style.color = '#FB4B5F';
+                    consoleLogs.appendChild(p);
+                }
+
+                // Compile audit configuration
+                let riskLabel = "Low Risk Profile";
+                let badgeClass = "bg-greenAccent/15 text-greenAccent border border-greenAccent/30";
+                let description = "Package architecture complies with sandbox security limits.";
+                if (realScanFailed) {
+                    riskLabel = "SCAN FAILED";
+                    badgeClass = "bg-redAccent/15 text-redAccent border border-redAccent/30";
+                    description = realScanErrorMsg;
+                } else if (evaluationMetrics.score < 55) {
+                    riskLabel = "High Risk Level";
+                    badgeClass = "bg-redAccent/15 text-redAccent border border-redAccent/30";
+                    description = "Dynamic check failed: Complex structural anomalies or critical components missing.";
+                } else if (evaluationMetrics.score < 80) {
+                    riskLabel = "Medium Risk Alert";
+                    badgeClass = "bg-amberAccent/15 text-amberAccent border border-amberAccent/30";
+                    description = "Marginal values observed. Packaging shows elevated complexity limits.";
+                }
+
+                activeAudit = {
+                    scanHash: activeScanHash,
+                    name: file.name,
+                    size: file.size,
+                    sha256: hashValue,
+                    entropy: entropyValue,
+                    score: evaluationMetrics.score,
+                    zipMeta: zipMetadata,
+                    deductions: evaluationMetrics.deductions,
+                    riskLabel,
+                    badgeClass
+                };
+
+                // Add scan values to active session indexes
+                sessionRegistry.push(activeAudit);
+                updateHistoricalTables();
+                updateAnalyticsHUD();
+
+                // Swap dynamic elements
+                antivirusScanMonitor.classList.add('hidden');
+                scanResults.classList.remove('hidden');
+
+                // Render result elements
+                resFilename.innerText = activeAudit.name;
+                resFilename.title = activeAudit.name;
+                resFilesize.innerText = `${(activeAudit.size / 1024).toFixed(1)} KB`;
+                resSha256.innerText = activeAudit.sha256;
+                resEntropy.innerText = activeAudit.entropy.toFixed(5);
+                
+                resRiskBadge.innerText = activeAudit.riskLabel;
+                resRiskBadge.className = `text-[10px] font-bold px-2 py-0.5 rounded uppercase ${activeAudit.badgeClass}`;
+
+                if (zipMetadata.isZip) {
+                    resSoStatus.innerText = "Native binaries detected within system folder path hierarchies.";
+                    resSoIndicator.innerText = `${zipMetadata.soCount} SO FILES`;
+                    resSoIndicator.className = "text-xs font-mono font-bold bg-cyanAccent/10 text-cyanAccent border border-cyanAccent/30 px-2.5 py-1 rounded";
+                } else {
+                    resSoStatus.innerText = "Binary format — structural native libraries inspection skipped";
+                    resSoIndicator.innerText = "SKIPPED";
+                    resSoIndicator.className = "text-xs font-mono font-bold bg-white/5 border border-panelBorder px-2.5 py-1 rounded text-gray-500";
+                }
+
+                // Final Score HUD values
+                scoreVal.innerText = realScanFailed ? "—" : activeAudit.score;
+                scoreSubtext.innerText = realScanFailed ? "FAILED" : "OF 100";
+                
+                const circumference = 226;
+                const offset = realScanFailed ? circumference : circumference - (activeAudit.score / 100) * circumference;
+                scoreRing.style.strokeDashoffset = offset;
+                
+                if (realScanFailed) {
+                    scoreRing.style.stroke = "var(--redAccent)";
+                } else if (activeAudit.score >= 80) {
+                    scoreRing.style.stroke = "var(--greenAccent)";
+                } else if (activeAudit.score >= 55) {
+                    scoreRing.style.stroke = "var(--amberAccent)";
+                } else {
+                    scoreRing.style.stroke = "var(--redAccent)";
+                }
+
+                updateDashboardStatus(
+                    realScanFailed ? "SCAN FAILED" : "ANALYSIS COMPLETE",
+                    description,
+                    realScanFailed ? "text-redAccent" : "text-greenAccent"
+                );
+
+            } catch (err) {
+                console.error(err);
+                alert("Core Sandbox compilation failure: " + err.message);
+                resetDashboard();
+            } finally {
+                // Unlock dynamic buttons
+                uploadBtn.disabled = false;
+                dropZone.style.pointerEvents = 'auto';
+                dropText.innerText = "Drag & Drop APK, AAB, IPA, APPX or EXE files here";
+                uploadBtn.innerText = "SELECT FILE";
+            }
+        }
+
+        // Checklist states
+        function markChecklistIndex(index, checked = true) {
+            const item = checkItems[index];
+            const dot = item.querySelector('.icon-box');
+            if (checked) {
+                item.className = "check-item flex items-center gap-2 text-[11px] text-greenAccent font-semibold";
+                dot.className = "icon-box w-3.5 h-3.5 rounded-full border border-greenAccent flex items-center justify-center text-greenAccent text-[9px] font-bold bg-greenAccent/15 shadow-[0_0_8px_rgba(0,230,118,0.3)]";
+                dot.innerText = "✓";
+            } else {
+                item.className = "check-item flex items-center gap-2 text-[11px] text-gray-500";
+                dot.className = "icon-box w-3.5 h-3.5 rounded-full border border-gray-600 flex items-center justify-center text-[9px] font-bold";
+                dot.innerText = "•";
+            }
+        }
+
+        function resetChecklistUI() {
+            for (let i = 0; i < checkItems.length; i++) {
+                markChecklistIndex(i, false);
+            }
+        }
+
+        function updateDashboardStatus(title, desc, textClass) {
+            statusTitle.innerText = title;
+            statusTitle.className = `font-bold text-xl mb-2 tracking-wide uppercase ${textClass}`;
+            statusDesc.innerText = desc;
+        }
+
+        function resetDashboard() {
+            activeAudit = null;
+            resetChecklistUI();
+            
+            scanResults.classList.add('hidden');
+            antivirusScanMonitor.classList.add('hidden');
+            scanPlaceholder.classList.remove('hidden');
+
+            scoreVal.innerText = "--";
+            scoreSubtext.innerText = "PENDING";
+            scoreRing.style.strokeDashoffset = "226";
+            scoreRing.style.stroke = "var(--cyanAccent)";
+
+            updateDashboardStatus("AWAITING BINARY", "Provide a package to start cryptographic and file system validation processes", "text-gray-400");
+            fileInput.value = "";
+        }
+
+        resetSummaryBtn?.addEventListener('click', resetDashboard);
+
+        // Render sessions database records
+        function updateHistoricalTables() {
+            const appBody = document.getElementById('app-database-body');
+            const repBody = document.getElementById('reports-database-body');
+
+            appBody.innerHTML = '';
+            repBody.innerHTML = '';
+
+            if (sessionRegistry.length === 0) {
+                appBody.innerHTML = `<tr id="app-database-empty"><td colspan="5" class="py-8 text-center text-gray-500">No applications processed during this session.</td></tr>`;
+                repBody.innerHTML = `<tr id="reports-database-empty"><td colspan="4" class="py-8 text-center text-gray-500">No session reports compiled yet. Analyze a file to spawn threat reports.</td></tr>`;
+                return;
+            }
+
+            sessionRegistry.forEach((audit) => {
+                // Application Database Entry
+                const appRow = document.createElement('tr');
+                appRow.className = "border-b border-panelBorder hover:bg-white/5 transition-all";
+                appRow.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-white truncate max-w-[200px]" title="${audit.name}">${audit.name}</td>
+                    <td class="py-3 px-4 text-gray-400 font-mono">${audit.size.toLocaleString()} Bytes</td>
+                    <td class="py-3 px-4 text-gray-400 font-mono">${audit.entropy.toFixed(4)}</td>
+                    <td class="py-3 px-4 text-gray-400">${audit.zipMeta.isZip ? audit.zipMeta.fileCount : 'Raw Binary'}</td>
+                    <td class="py-3 px-4">
+                        <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full ${audit.badgeClass}">${audit.score} / 100</span>
+                    </td>
+                `;
+                appBody.appendChild(appRow);
+
+                // Reports Database Entry
+                const repRow = document.createElement('tr');
+                repRow.className = "border-b border-panelBorder hover:bg-white/5 transition-all cursor-pointer";
+                repRow.addEventListener('click', () => {
+                    openReportModalWithData(audit);
+                });
+                repRow.innerHTML = `
+                    <td class="py-3 px-4 font-mono text-cyanAccent">${audit.sha256.substring(0, 16)}...</td>
+                    <td class="py-3 px-4 text-gray-300 font-semibold truncate max-w-[200px]" title="${audit.name}">${audit.name}</td>
+                    <td class="py-3 px-4"><span class="font-bold text-white">${audit.score}</span></td>
+                    <td class="py-3 px-4">
+                        <span class="text-[9px] uppercase font-extrabold tracking-wider underline text-cyanAccent">View Audit</span>
+                    </td>
+                `;
+                repBody.appendChild(repRow);
+            });
+        }
+
+        // Update Analytics
+        function updateAnalyticsHUD() {
+            let high = 0;
+            let medium = 0;
+            let low = 0;
+
+            sessionRegistry.forEach(audit => {
+                if (audit.entropy > 7.2) {
+                    high++;
+                } else if (audit.entropy >= 6.0) {
+                    medium++;
+                } else {
+                    low++;
+                }
+            });
+
+            const total = sessionRegistry.length || 1;
+
+            document.getElementById('analytics-high-count').innerText = `${high} App${high === 1 ? '' : 's'}`;
+            document.getElementById('analytics-medium-count').innerText = `${medium} App${medium === 1 ? '' : 's'}`;
+            document.getElementById('analytics-low-count').innerText = `${low} App${low === 1 ? '' : 's'}`;
+
+            document.getElementById('bar-entropy-high').style.width = `${(high / total) * 100}%`;
+            document.getElementById('bar-entropy-medium').style.width = `${(medium / total) * 100}%`;
+            document.getElementById('bar-entropy-low').style.width = `${(low / total) * 100}%`;
+        }
+
+        // Open detailed Audit Modal with transition animations
+        async function openReportModalWithData(audit) {
+            document.getElementById('modal-filename').innerText = audit.name;
+            document.getElementById('modal-size').innerText = `${audit.size.toLocaleString()} Bytes`;
+            document.getElementById('modal-sha256').innerText = audit.sha256;
+            document.getElementById('modal-entropy').innerText = audit.entropy.toFixed(6);
+            document.getElementById('modal-zip').innerText = audit.zipMeta.isZip ? `ZIP Archive (${audit.zipMeta.fileCount} entries)` : "Raw Binary Format";
+
+            const checkStyle = (bool) => bool 
+                ? `<span class="text-greenAccent font-bold">✓ Detected</span>` 
+                : `<span class="text-redAccent font-bold">✕ Missing</span>`;
+
+            document.getElementById('modal-manifest').innerHTML = audit.zipMeta.isZip ? checkStyle(audit.zipMeta.hasManifest) : 'Bypassed';
+            document.getElementById('modal-dex').innerHTML = audit.zipMeta.isZip ? checkStyle(audit.zipMeta.hasClassesDex) : 'Bypassed';
+            document.getElementById('modal-so-count').innerText = audit.zipMeta.isZip ? `${audit.zipMeta.soCount} Libraries` : 'Bypassed';
+            document.getElementById('modal-assets-count').innerText = audit.zipMeta.isZip ? `res: ${audit.zipMeta.resCount} / assets: ${audit.zipMeta.assetsCount}` : 'Bypassed';
+
+            // Populate deductions list inside modal
+            const listContainer = document.getElementById('modal-deductions-list');
+            listContainer.innerHTML = '';
+
+            audit.deductions.forEach(item => {
+                const isPenalty = item.deduction < 0;
+                const row = document.createElement('div');
+                row.className = `border-b border-[#25233A] pb-2.5 last:border-none ${isPenalty ? 'text-redAccent' : 'text-gray-300'}`;
+                row.innerHTML = `
+                    <div class="flex justify-between font-bold mb-1">
+                        <span>${item.rule} [${item.metric}]</span>
+                        <span>${item.deduction === null ? 'BACKEND FINDING' : (isPenalty ? item.deduction : 'Passed')}</span>
+                    </div>
+                    <p class="text-[10px] text-gray-500 leading-normal font-sans">${item.description}</p>
+                `;
+                listContainer.appendChild(row);
+            });
+
+            reportModal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContentCard.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        viewReportBtn?.addEventListener('click', () => {
+            if (activeAudit) openReportModalWithData(activeAudit);
+        });
+
+        const closeModal = () => {
+            modalContentCard.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                reportModal.classList.add('hidden');
+            }, 150);
+        };
+        modalCloseBtn?.addEventListener('click', closeModal);
+        modalCloseFooter?.addEventListener('click', closeModal);
+
+        window.addEventListener('click', (e) => {
+            if (e.target === reportModal) closeModal();
+        });
+
+        // ============================================================
+        // PROFESSIONAL REPORT GENERATOR
+        // - PDF: flowing A4 pages, no forced blank/black pages
+        // - Word: flowing A4-compatible document
+        // - Both use the same report model
+        // - No JSON download button
+        // - Maximum target: 8 pages
+        // ============================================================
+
+        function reportSafe(value, fallback = 'Not available') {
+            if (value === null || value === undefined || value === '') return fallback;
+            if (typeof value === 'object') {
+                try { return JSON.stringify(value); } catch (_) { return fallback; }
+            }
+            return String(value);
+        }
+
+        function escapeHtml(value) {
+            return reportSafe(value, '').replace(/[&<>"']/g, ch => ({
+                '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+            }[ch]));
+        }
+
+        function reportRisk(score) {
+            if (typeof score !== 'number') return 'Assessment Unavailable';
+            if (score >= 80) return 'Low Risk';
+            if (score >= 55) return 'Medium Risk';
+            return 'High Risk';
+        }
+
+        function flattenPermissionValues(obj, out = [], depth = 0) {
+            if (depth > 6 || obj === null || obj === undefined) return out;
+            if (Array.isArray(obj)) {
+                obj.forEach(v => {
+                    if (typeof v === 'string' && /permission|^android\./i.test(v)) {
+                        out.push({ name: v, status: 'unspecified', description: '' });
+                    } else if (v && typeof v === 'object') {
+                        const name = v.name || v.permission || v.id || v.key;
+                        if (name) {
+                            out.push({
+                                name: String(name),
+                                status: String(v.status || v.severity || v.level || v.risk || 'unspecified'),
+                                description: String(v.description || v.info || v.reason || v.details || '')
+                            });
+                        } else {
+                            flattenPermissionValues(v, out, depth + 1);
+                        }
+                    }
+                });
+                return out;
+            }
+            if (typeof obj !== 'object') return out;
+            Object.entries(obj).forEach(([key, value]) => {
+                const looksLikePermission = /permission/i.test(key) || /^android\.permission\./i.test(key) || /^com\.[\w.]+\.permission\./i.test(key);
+                if (looksLikePermission && !/^permissions?$/i.test(key)) {
+                    if (typeof value === 'string') {
+                        out.push({ name: key, status: value, description: '' });
+                    } else if (value && typeof value === 'object') {
+                        out.push({
+                            name: key,
+                            status: String(value.status || value.severity || value.level || value.risk || 'unspecified'),
+                            description: String(value.description || value.info || value.reason || value.details || '')
+                        });
+                    } else {
+                        out.push({ name: key, status: 'unspecified', description: '' });
+                    }
+                } else if (/^permissions?$/i.test(key) && value && typeof value === 'object') {
+                    flattenPermissionValues(value, out, depth + 1);
+                } else if (typeof value === 'object') {
+                    flattenPermissionValues(value, out, depth + 1);
+                }
+            });
+            return out;
+        }
+
+        function permissionName(r){
+            if (typeof r === 'string') return r;
+            return String(r?.name || r?.permission || r?.permission_name || r?.label || '').trim();
+        }
+        function permissionStatus(r){
+            if (typeof r === 'string') return '';
+            return String(r?.status || r?.protection || r?.protection_level || r?.level || r?.risk || r?.severity || '').trim();
+        }
+        function normalizePermissionStatus(r){
+            const s=permissionStatus(r).toLowerCase(), n=permissionName(r).toLowerCase();
+            if(/dangerous|critical|high/.test(s)) return 'Dangerous';
+            if(/signature.?or.?system|signature/.test(s)) return 'Signature';
+            if(/normal|low/.test(s)) return 'Normal';
+            if(/dangerous/.test(n)) return 'Dangerous';
+            return 'Unknown';
+        }
+        function flattenPermissionValues(value,out,depth=0){
+            if(depth>10 || value==null) return;
+            if(typeof value==='string'){
+                if(/(?:android|com)\.permission\.[A-Z0-9_]+/i.test(value)){
+                    const m=value.match(/((?:android|com)\.permission\.[A-Z0-9_\.]+)(?:\s*\(([^)]+)\))?/i);
+                    out.push({name:m?m[1]:value,status:m&&m[2]?m[2]:''});
+                }
+                return;
+            }
+            if(Array.isArray(value)){ value.forEach(v=>flattenPermissionValues(v,out,depth+1)); return; }
+            if(typeof value!=='object') return;
+            const n=permissionName(value);
+            if(n && /permission/i.test(n)) out.push(value);
+            Object.entries(value).forEach(([k,v])=>{
+                if(/permission|manifest|findings|results|analysis|data|report|security/i.test(k)) flattenPermissionValues(v,out,depth+1);
+                else if(typeof v==='object') flattenPermissionValues(v,out,depth+1);
+            });
+        }
+        function extractPermissions(){
+            const records=[];
+            const roots=[backendReportData?.report_data,backendReportData?.report_json,backendReportData?.report,backendReportData?.data,backendReportData?.analysis,backendReportData?.results,backendReportData?.permissions,backendReportData?.manifest?.permissions,backendReportData?.manifest_analysis?.permissions,backendReportData];
+            roots.forEach(v=>flattenPermissionValues(v,records));
+            // Fallback: the scorecard finding text can contain the exact critical permissions.
+            const findingContainer=getBackendFindingsContainer(backendReportData||{});
+            flattenPermissionValues(findingContainer,records);
+            const seen=new Set(), clean=[];
+            records.forEach(r=>{
+                const name=permissionName(r); if(!name || !/permission\./i.test(name)) return;
+                const key=name.toLowerCase(); if(seen.has(key)) return; seen.add(key);
+                clean.push({name,status:normalizePermissionStatus(r).toLowerCase(),description:String(r.description||'').trim()});
+            });
+            console.log('=== ASAF DEBUG: PERMISSION CANDIDATES ===', clean);
+            return clean.slice(0,200);
+        }
+        function getPermissionCounts(){
+            const records=extractPermissions();
+            const c={Dangerous:0,Normal:0,Signature:0,Unknown:0,Total:records.length};
+            records.forEach(r=>c[normalizePermissionStatus(r)]++);
+            // Explicit aggregate maps, when present, override record-derived zeros.
+            const stack=[backendReportData?.report_data,backendReportData?.report_json,backendReportData];
+            const aggregate={Dangerous:0,Normal:0,Signature:0,Unknown:0};
+            let foundAggregate=false;
+            while(stack.length){
+                const x=stack.pop(); if(!x||typeof x!=='object') continue;
+                if(Array.isArray(x)){x.forEach(v=>stack.push(v));continue;}
+                Object.entries(x).forEach(([k,v])=>{
+                    const kl=k.toLowerCase();
+                    if(typeof v==='number' && /dangerous|normal|signature|unknown|unspecified/.test(kl)){
+                        foundAggregate=true; const n=Math.max(0,Math.floor(v));
+                        if(/dangerous/.test(kl)) aggregate.Dangerous=Math.max(aggregate.Dangerous,n);
+                        else if(/signature/.test(kl)) aggregate.Signature=Math.max(aggregate.Signature,n);
+                        else if(/normal/.test(kl)) aggregate.Normal=Math.max(aggregate.Normal,n);
+                        else aggregate.Unknown=Math.max(aggregate.Unknown,n);
+                    } else if(v&&typeof v==='object') stack.push(v);
+                });
+            }
+            if(foundAggregate){ c.Dangerous=Math.max(c.Dangerous,aggregate.Dangerous); c.Normal=Math.max(c.Normal,aggregate.Normal); c.Signature=Math.max(c.Signature,aggregate.Signature); c.Unknown=Math.max(c.Unknown,aggregate.Unknown); c.Total=c.Dangerous+c.Normal+c.Signature+c.Unknown; }
+            console.log('=== ASAF DEBUG: PERMISSION COUNTS ===',c);
+            return c;
+        }
+        function summarizePermissionStatus(records){
+            const c={Dangerous:0,Normal:0,Signature:0,Unknown:0};
+            (records||[]).forEach(r=>c[normalizePermissionStatus(r)]++);
+            return c;
+        }
+        function refreshPermissionDashboard(){
+            const c=getPermissionCounts();
+            const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=String(v);};
+            set('permission-total',c.Total); set('permission-dangerous',c.Dangerous); set('permission-normal',c.Normal); set('permission-signature',c.Signature); set('permission-unknown',c.Unknown);
+            const donut=document.querySelector('.donut');
+            if(donut && c.Total){ const d=c.Dangerous/c.Total*100,n=c.Normal/c.Total*100,s=c.Signature/c.Total*100; donut.style.background=`conic-gradient(#FF477E 0 ${d}%,#00D9FF ${d}% ${d+n}%,#FBBF24 ${d+n}% ${d+n+s}%,#8B5CF6 ${d+n+s}% 100%)`; }
+        }
+
+        function getFindingRows(audit) {
+            const rows = Array.isArray(audit?.deductions) ? audit.deductions : [];
+            return rows.slice(0, 40).map((item, i) => ({
+                no: i + 1,
+                title: reportSafe(item.rule, `Finding ${i + 1}`),
+                severity: reportSafe(item.metric, 'INFO'),
+                deduction: typeof item.deduction === 'number' ? item.deduction : null,
+                description: reportSafe(item.description, 'No additional description available.')
+            }));
+        }
+
+        function getRecommendations(audit) {
+            const findings = getFindingRows(audit);
+            const recs = [];
+            findings.filter(f => ['HIGH', 'WARNING', 'HOTSPOT'].includes(String(f.severity).toUpperCase())).forEach(f => {
+                recs.push(`Review "${f.title}" and validate the change with a repeat security scan.`);
+            });
+            recs.push('Review Android permissions, exported components and network security configuration before release.');
+            recs.push('Keep dependencies, SDK targets and native libraries current and remove unused components.');
+            recs.push('Enforce certificate pinning and disable cleartext traffic in the network security configuration.');
+            recs.push('Apply least-privilege to declared permissions and remove any that are unused by current features.');
+            recs.push('Repeat the assessment after remediation and compare the score, findings and package indicators.');
+            return [...new Set(recs)].slice(0, 8);
+        }
+
+        function buildReportModel(audit) {
+            const meta = audit?.zipMeta || {};
+            const findings = getFindingRows(audit);
+            const backendFindings = getBackendFindingsContainer();
+            const severityCounts = { HIGH:0, WARNING:0, INFO:0, HOTSPOT:0, SECURE:0 };
+            Object.keys(severityCounts).forEach(key => {
+                severityCounts[key] = backendCount(key);
+            });
+            const findingTotal = Object.values(severityCounts).reduce((a,b)=>a+b,0);
+            const backendSummary = Object.keys(severityCounts)
+                .map(key => `${key}: ${severityCounts[key]}`)
+                .join(' | ');
+
+            const structureTotal = meta.isZip
+                ? Math.max(1, Number(meta.fileCount || 0))
+                : Math.max(1, Number(audit?.size || 1));
+            const permissionRecords = extractPermissions();
+            const permissionCounts = getPermissionCounts();
+
+            return {
+                title: 'APPLICATION SECURITY ANALYSIS',
+                subtitle: 'Professional Mobile Application Security Assessment',
+                generated: new Date().toLocaleString(),
+                name: audit?.name || 'Unknown application',
+                size: Number(audit?.size || 0),
+                sha256: audit?.sha256 || 'Not available',
+                entropy: typeof audit?.entropy === 'number' ? audit.entropy : null,
+                score: typeof audit?.score === 'number' ? audit.score : null,
+                risk: reportRisk(audit?.score),
+                format: meta.isZip ? 'ZIP-based application package' : 'Raw / unknown binary structure',
+                fileCount: Number(meta.fileCount || 0),
+                manifest: meta.isZip ? (meta.hasManifest ? 'Detected' : 'Not detected') : 'Not assessed',
+                dex: meta.isZip ? (meta.hasClassesDex ? 'Detected' : 'Not detected') : 'Not assessed',
+                soCount: Number(meta.soCount || 0),
+                assets: Number(meta.assetsCount || 0),
+                resources: Number(meta.resCount || 0),
+                backendSummary,
+                findings,
+                negative: findings.filter(f => ['HIGH', 'WARNING', 'HOTSPOT'].includes(String(f.severity).toUpperCase())),
+                recommendations: getRecommendations(audit),
+                permissions: permissionRecords.map(r => r.name),
+                permissionRecords,
+                permissionCounts,
+                severityCounts,
+                findingTotal,
+                structureTotal
+            };
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1500);
+        }
+
+        function pct(value, total) {
+            return total > 0 ? Math.round((value / total) * 100) : 0;
+        }
+
+        // ============================================================
+        // LOGO + CHART IMAGE GENERATION (canvas -> PNG data URLs)
+        // Rendered once as raster images so the SAME visual appears
+        // correctly in both the PDF (jsPDF addImage) and the Word
+        // document (plain <img>), which does not reliably render
+        // inline SVG when opened from an HTML-based .doc file.
+        // ============================================================
+
+        let cachedLogoDataUrl = null;
+        function getAsafLogoDataUrl() {
+            if (cachedLogoDataUrl) return cachedLogoDataUrl;
+            const c = document.createElement('canvas');
+            c.width = 300; c.height = 300;
+            const ctx = c.getContext('2d');
+            const grad = ctx.createLinearGradient(0, 0, 300, 300);
+            grad.addColorStop(0, '#00F5A0');
+            grad.addColorStop(0.55, '#8B5CF6');
+            grad.addColorStop(1, '#EC4899');
+
+            ctx.beginPath();
+            ctx.moveTo(150, 14);
+            ctx.bezierCurveTo(205, 34, 250, 40, 282, 46);
+            ctx.lineTo(282, 150);
+            ctx.bezierCurveTo(282, 226, 224, 272, 150, 286);
+            ctx.bezierCurveTo(76, 272, 18, 226, 18, 150);
+            ctx.lineTo(18, 46);
+            ctx.bezierCurveTo(50, 40, 95, 34, 150, 14);
+            ctx.closePath();
+            ctx.fillStyle = '#10131D';
+            ctx.fill();
+            ctx.lineWidth = 7;
+            ctx.strokeStyle = grad;
+            ctx.stroke();
+
+            ctx.font = 'bold 74px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ASAF', 150, 138);
+
+            ctx.strokeStyle = '#00F5A0';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(150, 196, 16, Math.PI, 0, false);
+            ctx.stroke();
+            ctx.fillStyle = '#00F5A0';
+            ctx.fillRect(129, 196, 42, 30);
+            ctx.fillStyle = '#10131D';
+            ctx.beginPath();
+            ctx.arc(150, 210, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.font = 'bold 13px Arial';
+            ctx.fillStyle = '#C4B5FD';
+            ctx.fillText('SECURITY ANALYSIS', 150, 250);
+
+            cachedLogoDataUrl = c.toDataURL('image/png');
+            return cachedLogoDataUrl;
+        }
+
+        function createBarChartImage(title, entries) {
+            const rowH = 58;
+            const width = 1000, height = 90 + entries.length * rowH + 20;
+            const c = document.createElement('canvas');
+            c.width = width; c.height = height;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#123b66';
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(title, 24, 44);
+            ctx.strokeStyle = '#dbe4ed';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(24, 62); ctx.lineTo(width - 24, 62); ctx.stroke();
+
+            const maxVal = Math.max(1, ...entries.map(e => e.value));
+            const chartLeft = 260, chartRight = width - 90, chartWidth = chartRight - chartLeft;
+            entries.forEach((e, i) => {
+                const y = 92 + i * rowH;
+                ctx.fillStyle = '#33414f';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(e.label, chartLeft - 18, y + 26);
+
+                ctx.fillStyle = '#e8edf3';
+                ctx.fillRect(chartLeft, y, chartWidth, 34);
+                const w = Math.max(3, chartWidth * (e.value / maxVal));
+                ctx.fillStyle = e.color || '#1769aa';
+                ctx.fillRect(chartLeft, y, w, 34);
+
+                ctx.fillStyle = '#123b66';
+                ctx.font = 'bold 22px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`${e.value}`, chartLeft + w + 12, y + 26);
+            });
+            return { url: c.toDataURL('image/png'), width, height };
+        }
+
+        function createDonutChartImage(title, entries) {
+            const size = 620;
+            const c = document.createElement('canvas');
+            c.width = size; c.height = size + 40;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size + 40);
+            ctx.fillStyle = '#123b66';
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, size / 2, 40);
+
+            const realTotal = entries.reduce((a, e) => a + e.value, 0);
+            const total = realTotal || 1; // safe divisor only — never displayed
+            const cx = size / 2, cy = size / 2 + 30, r = 190;
+            let start = -Math.PI / 2;
+            if (realTotal === 0) {
+                // No data at all: draw a neutral empty ring instead of a
+                // misleading slice, and never print a fake "1" in the center.
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = '#dbe4ed';
+                ctx.lineWidth = 26;
+                ctx.stroke();
+            } else {
+                entries.forEach(e => {
+                    const angle = (e.value / total) * Math.PI * 2;
+                    if (angle <= 0) return;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, r, start, start + angle);
+                    ctx.closePath();
+                    ctx.fillStyle = e.color;
+                    ctx.fill();
+                    start += angle;
+                });
+            }
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.fillStyle = '#123b66';
+            ctx.font = 'bold 40px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(realTotal), cx, cy);
+
+            let ly = cy + r + 50;
+            ctx.font = '22px Arial';
+            ctx.textBaseline = 'alphabetic';
+            entries.forEach((e, i) => {
+                const lx = 60 + (i % 2) * 300;
+                const yy = ly + Math.floor(i / 2) * 38;
+                ctx.fillStyle = e.color;
+                ctx.fillRect(lx, yy - 18, 22, 22);
+                ctx.fillStyle = '#222';
+                ctx.textAlign = 'left';
+                ctx.fillText(`${e.label}: ${e.value} (${pct(e.value, total)}%)`, lx + 32, yy);
+            });
+            return { url: c.toDataURL('image/png'), width: size, height: size + 40 };
+        }
+
+        function buildChartSet(model) {
+            const totalSev = Object.values(model.severityCounts).reduce((a, b) => a + b, 0);
+            const severityDonut = createDonutChartImage('Finding Severity Distribution', [
+                { label: 'High', value: model.severityCounts.HIGH, color: '#e03131' },
+                { label: 'Warning', value: model.severityCounts.WARNING, color: '#f59f00' },
+                { label: 'Info', value: model.severityCounts.INFO, color: '#1971c2' },
+                { label: 'Hotspot', value: model.severityCounts.HOTSPOT, color: '#9c36b5' },
+                { label: 'Secure', value: model.severityCounts.SECURE, color: '#2f9e44' }
+            ]);
+            const structureBar = createBarChartImage('Package Structure Composition', [
+                { label: 'Native (.so)', value: model.soCount, color: '#1971c2' },
+                { label: 'Assets', value: model.assets, color: '#2f9e44' },
+                { label: 'Resources', value: model.resources, color: '#9c36b5' },
+                { label: 'Other entries', value: Math.max(0, model.fileCount - model.soCount - model.assets - model.resources), color: '#868e96' }
+            ]);
+            const permCounts = model.permissionCounts;
+            const permissionBar = createBarChartImage('Permission Risk Breakdown', [
+                { label: 'Dangerous', value: permCounts.Dangerous || 0, color: '#e03131' },
+                { label: 'Signature', value: permCounts.Signature || 0, color: '#f59f00' },
+                { label: 'Normal', value: permCounts.Normal || 0, color: '#2f9e44' },
+                { label: 'Unknown', value: permCounts.Unknown || 0, color: '#868e96' }
+            ]);
+            return { severityDonut, structureBar, permissionBar, totalSev };
+        }
+
+        function buildWordHtml(model) {
+            const charts = buildChartSet(model);
+            const logo = getAsafLogoDataUrl();
+
+            const findingRows = model.findings.length
+                ? model.findings.map(f => `<tr>
+                    <td>${f.no}</td><td>${escapeHtml(f.title)}</td>
+                    <td>${escapeHtml(f.severity)}</td><td>${f.deduction < 0 ? f.deduction : 'PASS'}</td>
+                    <td>${escapeHtml(f.description)}</td></tr>`).join('')
+                : `<tr><td colspan="5">No individual deductions were returned by the configured scan.</td></tr>`;
+
+            const permissionRows = model.permissionRecords.length
+                ? model.permissionRecords.map((p, i) => `<tr>
+                    <td>${i + 1}</td><td class="small">${escapeHtml(p.name)}</td>
+                    <td>${escapeHtml(p.status)}</td>
+                    <td>${escapeHtml(p.description || 'No additional description returned by the backend.')}</td></tr>`).join('')
+                : `<tr><td colspan="4">Permission list was not returned by the configured backend scan. No permissions have been invented for this report.</td></tr>`;
+
+            const recs = model.recommendations.map((r, i) => `<li><b>Recommendation ${i + 1}:</b> ${escapeHtml(r)}</li>`).join('');
+
+            const owaspRows = [
+                ['M1: Improper Platform Usage', 'Review manifest components, permissions and platform API usage flagged above.'],
+                ['M2: Insecure Data Storage', 'Confirm sensitive data is not persisted unencrypted in shared/external storage.'],
+                ['M3: Insecure Communication', 'Verify TLS configuration and the network security configuration file.'],
+                ['M4: Insecure Authentication', 'Validate session and credential handling in the authenticated flows.'],
+                ['M5: Insufficient Cryptography', 'Confirm approved algorithms and key sizes are used for stored/transmitted data.'],
+                ['M6: Insecure Authorization', 'Review role and permission checks on server-side endpoints used by the app.'],
+                ['M7: Client Code Quality', 'Address any hotspot findings raised in Section 3 of this report.'],
+                ['M8: Code Tampering', 'Confirm integrity checks and, where required, root/tamper detection.'],
+                ['M9: Reverse Engineering', 'Confirm obfuscation/minification status of release builds.'],
+                ['M10: Extraneous Functionality', 'Remove debug endpoints, test credentials and hidden switches before release.']
+            ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+
+            const glossary = [
+                ['SHA-256', 'Cryptographic hash used to uniquely fingerprint the analyzed package file.'],
+                ['Shannon entropy', 'A 0–8 measure of byte-level randomness; higher values can indicate packing or encryption.'],
+                ['Manifest', 'AndroidManifest.xml — declares components, permissions and configuration for an Android package.'],
+                ['classes.dex', 'Compiled Dalvik bytecode that contains the application\u2019s executable logic.'],
+                ['Hotspot', 'A finding that is not conclusively a vulnerability but merits manual review.'],
+                ['Dangerous permission', 'An Android permission classified as granting access to sensitive user data or device functions.']
+            ].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('');
+
+            return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8">
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+<style>
+@page { size:A4; margin:16mm 17mm 17mm 17mm; }
+body { font-family:Arial,Helvetica,sans-serif; color:#202733; font-size:10pt; line-height:1.45; margin:0; }
+h1 { color:#123b66; font-size:23pt; margin:0 0 5pt; }
+h2 { color:#123b66; font-size:15pt; margin:0 0 8pt; border-bottom:2px solid #dbe4ed; padding-bottom:5pt; page-break-after:avoid; }
+h3 { color:#176b86; font-size:11pt; margin:12pt 0 5pt; page-break-after:avoid; }
+p,li { text-align:justify; }
+.cover { padding:10mm 8mm 10mm; border-bottom:4px solid #1769aa; }
+.cover-head { display:table; width:100%; margin-bottom:14pt; }
+.cover-head .logo-cell { display:table-cell; width:70pt; vertical-align:middle; }
+.cover-head .title-cell { display:table-cell; vertical-align:middle; padding-left:12pt; }
+.logo-lg { width:60pt; height:60pt; }
+.logo-sm { width:20pt; height:20pt; vertical-align:middle; }
+.meta { color:#667085; font-size:9pt; }
+.scorebox { display:inline-block; border:1px solid #cbd5e1; padding:10pt 16pt; margin:10pt 0; }
+.score { font-size:25pt; font-weight:bold; color:#123b66; }
+table { width:100%; border-collapse:collapse; margin:8pt 0 14pt; page-break-inside:auto; }
+tr { page-break-inside:avoid; }
+th,td { border:1px solid #cfd6df; padding:5pt 6pt; vertical-align:top; }
+th { background:#edf3f8; color:#123b66; }
+.small { font-size:8pt; word-break:break-all; }
+.note { background:#f6f8fb; border-left:4px solid #1769aa; padding:8pt 10pt; }
+.grid { display:table; width:100%; table-layout:fixed; }
+.card { display:table-cell; border:1px solid #d6dee8; padding:8pt; }
+.card b { font-size:15pt; color:#123b66; }
+.chart-img { width:170mm; max-width:100%; display:block; margin:8pt auto; }
+.footer { color:#667085; font-size:8pt; border-top:1px solid #d6dee8; margin-top:16pt; padding-top:5pt; }
+.section { page-break-before:always; }
+.pageheader { display:table; width:100%; border-bottom:1px solid #dbe4ed; padding-bottom:6pt; margin-bottom:12pt; }
+.pageheader .lc { display:table-cell; width:26pt; }
+.pageheader .tc { display:table-cell; vertical-align:middle; padding-left:8pt; font-size:8pt; color:#667085; text-transform:uppercase; letter-spacing:0.5pt; }
+</style></head><body>
+
+<div class="cover">
+<div class="cover-head"><div class="logo-cell"><img class="logo-lg" src="${logo}"></div><div class="title-cell"><h1>${escapeHtml(model.title)}</h1><p class="meta">${escapeHtml(model.subtitle)}<br>Generated: ${escapeHtml(model.generated)}</p></div></div>
+<div class="scorebox"><div class="score">${model.score ?? 'N/A'} / 100</div><b>${escapeHtml(model.risk)}</b></div>
+<p>This assessment summarizes the package-level security indicators and the findings returned by the configured analysis backend (ASAF). It is a full professional report intended for engineering review, compliance documentation and remediation tracking.</p>
+<div class="grid">
+<div class="card"><span>Risk score</span><br><b>${model.score ?? 'N/A'}</b></div>
+<div class="card"><span>Dashboard deductions</span><br><b>${model.negative.length}</b></div>
+<div class="card"><span>Package entries</span><br><b>${model.fileCount || '\u2014'}</b></div>
+<div class="card"><span>Permissions returned</span><br><b>${model.permissionRecords.length}</b></div>
+</div>
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>1. Executive Summary</h2>
+<p>The analyzed application <b>${escapeHtml(model.name)}</b> was assessed using cryptographic hashing, entropy measurement, package-structure inspection and the configured backend security scorecard. The resulting score is <b>${model.score ?? 'N/A'} / 100</b>, classified as <b>${escapeHtml(model.risk)}</b>.</p>
+<p class="note"><b>Scope:</b> package structure, SHA-256, Shannon entropy, manifest/bytecode presence, native libraries, resources/assets, backend findings and configured scorecard results. Source-code, runtime, network, authentication and business-logic testing are not claimed unless explicitly returned by the backend.</p>
+<h3>Severity distribution</h3>
+<img class="chart-img" src="${charts.severityDonut.url}">
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>2. Application &amp; Binary Profile</h2>
+<table><tr><th>Metric</th><th>Result</th></tr>
+<tr><td>Application</td><td>${escapeHtml(model.name)}</td></tr>
+<tr><td>File size</td><td>${model.size.toLocaleString()} bytes (${(model.size/1048576).toFixed(2)} MB)</td></tr>
+<tr><td>SHA-256</td><td class="small">${escapeHtml(model.sha256)}</td></tr>
+<tr><td>Shannon entropy</td><td>${model.entropy === null ? 'Not available' : model.entropy.toFixed(5)} / 8</td></tr>
+<tr><td>Package structure</td><td>${escapeHtml(model.format)}</td></tr>
+<tr><td>Internal entries</td><td>${model.fileCount}</td></tr>
+<tr><td>AndroidManifest.xml</td><td>${escapeHtml(model.manifest)}</td></tr>
+<tr><td>classes.dex</td><td>${escapeHtml(model.dex)}</td></tr>
+<tr><td>Native libraries (.so)</td><td>${model.soCount}</td></tr>
+<tr><td>Assets / resources</td><td>${model.assets} / ${model.resources}</td></tr>
+</table>
+<h3>Structure composition</h3>
+<img class="chart-img" src="${charts.structureBar.url}">
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>3. Security Findings</h2>
+<p>${escapeHtml(model.backendSummary)}. The table below lists every dashboard deduction returned for this scan.</p>
+${model.findings.length ? `<table><tr><th>#</th><th>Finding</th><th>Severity / Metric</th><th>Impact</th><th>Explanation</th></tr>${findingRows}</table>` : `<p class="note">No individual dashboard deductions were returned. This is not equivalent to proof that the application is vulnerability-free.</p>`}
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>4. Permissions &amp; Configuration Review</h2>
+<p>Permissions are reported only when they are present in the scan response. This avoids fabricating security evidence.</p>
+<img class="chart-img" src="${charts.permissionBar.url}">
+<table><tr><th>#</th><th>Permission</th><th>Risk status</th><th>Description</th></tr>${permissionRows}</table>
+<h3>Configuration interpretation</h3>
+<p>Manifest presence supports package-level structural validation. Exported components, dangerous permissions, cleartext traffic, network security configuration and component exposure should be reviewed in the full backend result where available.</p>
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>5. Technical Analysis</h2>
+<table><tr><th>Area</th><th>Observation</th><th>Relative indicator</th></tr>
+<tr><td>Archive</td><td>${escapeHtml(model.format)}</td><td>${model.format.includes('ZIP') ? '100% recognized archive signature' : '0% ZIP signature match'}</td></tr>
+<tr><td>Manifest</td><td>${escapeHtml(model.manifest)}</td><td>${model.manifest === 'Detected' ? '100% present' : '0% detected'}</td></tr>
+<tr><td>Bytecode</td><td>${escapeHtml(model.dex)}</td><td>${model.dex === 'Detected' ? '100% present' : '0% detected'}</td></tr>
+<tr><td>Native libraries</td><td>${model.soCount}</td><td>${model.fileCount ? pct(model.soCount,model.fileCount) : 0}% of package entries</td></tr>
+<tr><td>Assets</td><td>${model.assets}</td><td>${model.fileCount ? pct(model.assets,model.fileCount) : 0}% of package entries</td></tr>
+<tr><td>Resources</td><td>${model.resources}</td><td>${model.fileCount ? pct(model.resources,model.fileCount) : 0}% of package entries</td></tr>
+<tr><td>Entropy</td><td>${model.entropy === null ? 'N/A' : model.entropy.toFixed(5)}</td><td>${model.entropy === null ? 'N/A' : pct(model.entropy,8)}% of maximum entropy</td></tr>
+</table>
+<h3>OWASP Mobile Top 10 mapping</h3>
+<table><tr><th>Category</th><th>Review guidance</th></tr>${owaspRows}</table>
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>6. Risk Assessment &amp; Interpretation</h2>
+<p>The configured score thresholds classify 80\u2013100 as Low Risk, 55\u201379 as Medium Risk, and below 55 as High Risk. The score is an assessment indicator produced by the configured model; it should be interpreted together with the individual findings and technical evidence.</p>
+<div class="grid">
+<div class="card"><span>Security score</span><br><b>${model.score ?? 'N/A'} / 100</b></div>
+<div class="card"><span>Risk classification</span><br><b>${escapeHtml(model.risk)}</b></div>
+<div class="card"><span>Negative findings</span><br><b>${model.negative.length}</b></div>
+</div>
+${model.negative.length ? `<h3>Priority findings</h3><ol>${model.negative.slice(0,10).map(f=>`<li><b>${escapeHtml(f.title)}</b> \u2014 ${escapeHtml(f.severity)} (${f.deduction})<br>${escapeHtml(f.description)}</li>`).join('')}</ol>` : '<p class="note">No negative dashboard deductions were returned for this scan.</p>'}
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>7. Remediation Recommendations</h2>
+<ol>${recs}</ol>
+<h3>Retest procedure</h3>
+<p>After changes are applied, repeat the scan and compare the security score, finding set, permission/configuration evidence, package structure, entropy and native-library profile. Record the new SHA-256 for audit traceability.</p>
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>8. Methodology &amp; Glossary</h2>
+<h3>Methodology</h3>
+<p>This report is generated entirely client-side. The application package is hashed (SHA-256), its byte-level Shannon entropy is calculated, and its internal structure (manifest, bytecode, native libraries, assets and resources) is parsed directly from the archive. These local indicators are combined with the findings and scorecard returned by the configured ASAF backend service to produce the score and classification shown in Section 6.</p>
+<h3>Glossary of terms</h3>
+<table><tr><th>Term</th><th>Definition</th></tr>${glossary}</table>
+</div>
+
+<div class="section">
+<div class="pageheader"><div class="lc"><img class="logo-sm" src="${logo}"></div><div class="tc">ASAF \u2014 Application Security Analysis Framework</div></div>
+<h2>9. Conclusion</h2>
+<p>The assessment of <b>${escapeHtml(model.name)}</b> produced a score of <b>${model.score ?? 'N/A'} / 100</b> and a classification of <b>${escapeHtml(model.risk)}</b>. The report consolidates the evidence returned by the configured analysis workflow into a readable format suitable for engineering or compliance documentation.</p>
+<table><tr><th>Audit metadata</th><th>Value</th></tr>
+<tr><td>Generated</td><td>${escapeHtml(model.generated)}</td></tr>
+<tr><td>Application</td><td>${escapeHtml(model.name)}</td></tr>
+<tr><td>SHA-256</td><td class="small">${escapeHtml(model.sha256)}</td></tr>
+<tr><td>Backend finding summary</td><td>${escapeHtml(model.backendSummary)}</td></tr></table>
+<p class="footer">ASAF \u2014 Application Security Analysis Framework \u2014 Professional Security Assessment Report</p>
+</div>
+</body></html>`;
+        }
+
+        function pdfText(doc, text, x, y, width, fontSize=9, color=[55,65,81], lineHeight=5) {
+            doc.setTextColor(...color);
+            doc.setFont('helvetica','normal');
+            doc.setFontSize(fontSize);
+            const lines = doc.splitTextToSize(String(text), width);
+            if (lines.length > 1) {
+                for (let i = 0; i < lines.length; i++) {
+                    doc.text(lines[i], x, y + i * lineHeight, {
+                        align: i === lines.length - 1 ? 'left' : 'justify',
+                        maxWidth: width
+                    });
+                }
+            } else {
+                doc.text(lines, x, y);
+            }
+            return y + lines.length * lineHeight;
+        }
+
+        function pdfHeader(doc, model, pageNo, logoDataUrl) {
+            doc.setFillColor(18,59,102);
+            doc.rect(0,0,210,18,'F');
+            try { doc.addImage(logoDataUrl,'PNG',6,2.5,13,13); } catch(_) {}
+            doc.setTextColor(255,255,255);
+            doc.setFont('helvetica','bold');
+            doc.setFontSize(10);
+            doc.text('ASAF | APPLICATION SECURITY ANALYSIS',23,11);
+            doc.setFont('helvetica','normal');
+            doc.setFontSize(7);
+            doc.text(`${model.name.slice(0,40)}  |  Page ${pageNo}`,195,11,{align:'right'});
+            doc.setDrawColor(215,223,232);
+            doc.line(15,23,195,23);
+        }
+
+        function pdfFooter(doc) {
+            doc.setDrawColor(215,223,232);
+            doc.line(15,286,195,286);
+            doc.setTextColor(100,116,139);
+            doc.setFont('helvetica','normal');
+            doc.setFontSize(7);
+            doc.text('ASAF \u2014 Professional Mobile Application Security Assessment',15,291);
+        }
+
+        function pdfAddPage(doc, model, pageNo, logoDataUrl) {
+            if (pageNo > 1) doc.addPage();
+            pdfHeader(doc,model,pageNo,logoDataUrl);
+            return 31;
+        }
+
+        function pdfEnsure(doc, model, state, needed=12) {
+            if (state.y + needed > 276) {
+                pdfFooter(doc);
+                state.page += 1;
+                state.y = pdfAddPage(doc,model,state.page,state.logo);
+            }
+            return state;
+        }
+
+        function pdfTitle(doc, model, text, state) {
+            pdfEnsure(doc, model, state, 14);
+            doc.setTextColor(18,59,102);
+            doc.setFont('helvetica','bold');
+            doc.setFontSize(14);
+            doc.text(text,15,state.y);
+            doc.setDrawColor(215,223,232);
+            doc.line(15,state.y+3,195,state.y+3);
+            state.y += 11;
+        }
+
+        function pdfParagraph(doc, model, state, text, size=9) {
+            const lines = doc.splitTextToSize(String(text),180);
+            const h = lines.length * 4.6 + 3;
+            pdfEnsure(doc,model,state,h);
+            state.y = pdfText(doc,text,15,state.y,180,size,[55,65,81],4.6);
+            state.y += 3;
+        }
+
+        function pdfTable(doc, model, state, rows, widths=[65,115]) {
+            // Pre-measure the whole table. If it fits within one usable page
+            // height, ensure it as a single block so a lone trailing row can
+            // never spill onto an otherwise near-empty page.
+            const rowHeights = rows.map(row => {
+                const leftLines = doc.splitTextToSize(String(row[0]),widths[0]-6);
+                const rightLines = doc.splitTextToSize(String(row[1]),widths[1]-6);
+                return Math.max(leftLines.length,rightLines.length)*4.2+7;
+            });
+            const totalTableHeight = rowHeights.reduce((a,b)=>a+b,0);
+            const usablePageHeight = 276 - 31;
+            if (totalTableHeight <= usablePageHeight) {
+                pdfEnsure(doc,model,state,totalTableHeight+2);
+            }
+            rows.forEach((row, idx) => {
+                const left = String(row[0]);
+                const right = String(row[1]);
+                const leftLines = doc.splitTextToSize(left,widths[0]-6);
+                const rightLines = doc.splitTextToSize(right,widths[1]-6);
+                const rh = Math.max(leftLines.length,rightLines.length)*4.2+7;
+                pdfEnsure(doc,model,state,rh+2);
+                const x=15, y=state.y, h=rh;
+                doc.setFillColor(idx===0 ? 237:255, idx===0 ? 243:255, idx===0 ? 248:255);
+                doc.setDrawColor(205,214,224);
+                doc.rect(x,y,widths[0],h,'FD');
+                doc.rect(x+widths[0],y,widths[1],h,'S');
+                doc.setTextColor(18,59,102);
+                doc.setFont('helvetica',idx===0?'bold':'normal');
+                doc.setFontSize(8);
+                doc.text(leftLines,x+3,y+5);
+                doc.setTextColor(32,39,51);
+                doc.text(rightLines,x+widths[0]+3,y+5);
+                state.y += h;
+            });
+            state.y += 4;
+        }
+
+        function pdfCardRow(doc, model, state, cards) {
+            const gap = 4, w = (180 - gap * (cards.length - 1)) / cards.length, h = 22;
+            pdfEnsure(doc, model, state, h + 6);
+            cards.forEach((card, i) => {
+                const x = 15 + i * (w + gap);
+                doc.setDrawColor(214, 222, 232);
+                doc.setFillColor(250, 251, 253);
+                doc.rect(x, state.y, w, h, 'FD');
+                doc.setTextColor(102, 112, 133);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.5);
+                doc.text(doc.splitTextToSize(card.label, w - 6), x + 3, state.y + 7);
+                doc.setTextColor(18, 59, 102);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(13);
+                doc.text(String(card.value), x + 3, state.y + 17);
+            });
+            state.y += h + 8;
+        }
+
+        function pdfTocList(doc, model, state, items) {
+            pdfEnsure(doc, model, state, items.length * 6 + 10);
+            doc.setTextColor(18, 59, 102);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text('Report Contents', 15, state.y);
+            state.y += 7;
+            doc.setDrawColor(215, 223, 232);
+            doc.line(15, state.y - 4, 195, state.y - 4);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(55, 65, 81);
+            items.forEach(item => {
+                pdfEnsure(doc, model, state, 6);
+                doc.text(item, 18, state.y);
+                state.y += 6.2;
+            });
+            state.y += 4;
+        }
+
+        function pdfImage(doc, model, state, chart, maxWidthMM=180) {
+            const w = maxWidthMM;
+            const h = w * (chart.height / chart.width);
+            pdfEnsure(doc, model, state, h + 6);
+            doc.addImage(chart.url,'PNG',15,state.y,w,h);
+            state.y += h + 6;
+        }
+
+        async function generateCondensedPDF(audit) {
+            if (!window.jspdf?.jsPDF) throw new Error('PDF engine did not load. Reload the page while connected to the internet.');
+            const model=buildReportModel(audit);
+            const charts=buildChartSet(model);
+            const logo=getAsafLogoDataUrl();
+            const {jsPDF}=window.jspdf;
+            const doc=new jsPDF({unit:'mm',format:'a4',compress:true});
+            const state={page:1,y:31,logo};
+            pdfHeader(doc,model,1,logo);
+
+            // Cover / Executive summary
+            try { doc.addImage(logo,'PNG',160,32,30,30); } catch(_) {}
+            doc.setTextColor(18,59,102); doc.setFont('helvetica','bold'); doc.setFontSize(23);
+            doc.text('Security Assessment Report',15,50);
+            doc.setTextColor(23,105,170); doc.setFontSize(11);
+            doc.text(model.name.slice(0,60),15,58);
+            doc.setTextColor(32,39,51); doc.setFontSize(11);
+            doc.text(`Security score: ${model.score ?? 'N/A'} / 100`,15,73);
+            doc.setFontSize(10); doc.text(`Risk classification: ${model.risk}`,15,80);
+            state.y=94;
+            pdfParagraph(doc,model,state,`This professional report summarizes package-level security evidence returned by the configured ASAF analysis workflow. It combines cryptographic identification, entropy measurement, structural package inspection and backend scorecard findings.`,9);
+            pdfParagraph(doc,model,state,`Scope: package structure, SHA-256, Shannon entropy, manifest and bytecode presence, native libraries, resources/assets, backend findings and configured scorecard results.`,9);
+            pdfTitle(doc,model,'Executive Metrics',state);
+            pdfTable(doc,model,state,[
+                ['Metric','Result'],
+                ['Application',model.name],
+                ['File size',`${model.size.toLocaleString()} bytes (${(model.size/1048576).toFixed(2)} MB)`],
+                ['Security score',`${model.score ?? 'N/A'} / 100`],
+                ['Risk level',model.risk],
+                ['Dashboard deductions',model.negative.length],
+                ['Generated',model.generated]
+            ]);
+            pdfParagraph(doc,model,state,`Of ${charts.totalSev || 0} categorized backend findings, ${model.severityCounts.HIGH} are High, ${model.severityCounts.WARNING} are Warning, ${model.severityCounts.INFO} are Info, ${model.severityCounts.HOTSPOT} are Hotspot and ${model.severityCounts.SECURE} are Secure. The full severity chart and finding list appear in Section 3.`,9);
+            pdfCardRow(doc,model,state,[
+                { label:'Risk score', value:`${model.score ?? 'N/A'}` },
+                { label:'Dashboard deductions', value:model.negative.length },
+                { label:'Package entries', value:model.fileCount || '\u2014' },
+                { label:'Permissions returned', value:model.permissionRecords.length }
+            ]);
+
+            // Profile
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'2. Application & Binary Profile',state);
+            pdfTable(doc,model,state,[
+                ['Metric','Result'],
+                ['Application',model.name],
+                ['SHA-256',model.sha256],
+                ['Shannon entropy',model.entropy===null?'Not available':`${model.entropy.toFixed(5)} / 8`],
+                ['Package structure',model.format],
+                ['Internal entries',model.fileCount],
+                ['AndroidManifest.xml',model.manifest],
+                ['classes.dex',model.dex],
+                ['Native libraries (.so)',model.soCount],
+                ['Assets / resources',`${model.assets} / ${model.resources}`]
+            ]);
+            pdfParagraph(doc,model,state,'Structural indicators describe the package that was available to the analysis engine. They are evidence for package-level review and should not be treated as a complete source-code or runtime security assessment.',9);
+            pdfTitle(doc,model,'Structure Composition',state);
+            pdfImage(doc,model,state,charts.structureBar,150);
+
+            // Findings
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'3. Security Findings & Severity Distribution',state);
+            pdfParagraph(doc,model,state,model.backendSummary,9);
+            pdfImage(doc,model,state,charts.severityDonut,95);
+            if (model.findings.length) {
+                model.findings.forEach(f=>{
+                    const lines=doc.splitTextToSize(`${f.no}. ${f.title} \u2014 ${f.severity} \u2014 ${f.deduction===null?'BACKEND':(f.deduction<0?f.deduction:'PASS')}\n${f.description}`,180);
+                    pdfEnsure(doc,model,state,lines.length*4.2+7);
+                    doc.setTextColor(18,59,102); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+                    doc.text(`${f.no}. ${f.title}`,15,state.y);
+                    state.y+=4;
+                    state.y=pdfText(doc,`${f.severity} | Impact: ${f.deduction===null?'BACKEND':(f.deduction<0?f.deduction:'PASS')}`,15,state.y,180,7.5,[71,85,105],3.8);
+                    state.y=pdfText(doc,f.description,15,state.y,180,7.5,[71,85,105],3.8)+3;
+                });
+            } else {
+                pdfParagraph(doc,model,state,'No individual dashboard deductions were returned. This does not prove that the application is vulnerability-free.',9);
+            }
+
+            // Permissions
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'4. Permissions & Configuration Review',state);
+            pdfParagraph(doc,model,state,'Permissions are shown only when they are present in the scan response. No permission values are invented.',9);
+            pdfImage(doc,model,state,charts.permissionBar,150);
+            if(model.permissionRecords.length){
+                pdfTable(doc,model,state,[
+                    ['Permission','Status'],
+                    ...model.permissionRecords.map(p=>[p.name, p.status])
+                ],[120,60]);
+            } else {
+                pdfParagraph(doc,model,state,'Permission list was not returned by the configured backend scan.',9);
+            }
+            pdfTitle(doc,model,'Configuration Review',state);
+            pdfTable(doc,model,state,[
+                ['Control','Observation'],
+                ['Manifest',model.manifest],
+                ['Bytecode',model.dex],
+                ['Exported components','Review in backend manifest/component results'],
+                ['Network security','Review cleartext traffic and network-security configuration'],
+                ['Dangerous permissions','Review backend permission findings if available']
+            ]);
+
+            // Technical
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'5. Technical Analysis',state);
+            pdfTable(doc,model,state,[
+                ['Area','Observation / percentage'],
+                ['Archive',`${model.format} | ${model.format.includes('ZIP')?'100%':'0%'} ZIP signature match`],
+                ['Manifest',`${model.manifest} | ${model.manifest==='Detected'?'100%':'0%'} detected`],
+                ['Bytecode',`${model.dex} | ${model.dex==='Detected'?'100%':'0%'} detected`],
+                ['Native libraries',`${model.soCount} | ${model.fileCount?pct(model.soCount,model.fileCount):0}% of package entries`],
+                ['Assets',`${model.assets} | ${model.fileCount?pct(model.assets,model.fileCount):0}% of package entries`],
+                ['Resources',`${model.resources} | ${model.fileCount?pct(model.resources,model.fileCount):0}% of package entries`],
+                ['Entropy',`${model.entropy===null?'N/A':model.entropy.toFixed(5)} | ${model.entropy===null?'N/A':pct(model.entropy,8)}% of maximum`]
+            ]);
+            pdfParagraph(doc,model,state,'Analytical limitation: this report reflects the data exposed by the configured scan and scorecard APIs. It does not claim source-code, runtime, network, authentication or business-logic testing unless those results are explicitly present.',9);
+            pdfTitle(doc,model,'OWASP Mobile Top 10 Mapping',state);
+            pdfTable(doc,model,state,[
+                ['Category','Review guidance'],
+                ['M1: Improper Platform Usage','Review manifest components, permissions and platform API usage.'],
+                ['M2: Insecure Data Storage','Confirm sensitive data is not persisted unencrypted.'],
+                ['M3: Insecure Communication','Verify TLS configuration and network security configuration.'],
+                ['M4: Insecure Authentication','Validate session and credential handling.'],
+                ['M5: Insufficient Cryptography','Confirm approved algorithms and key sizes are used.'],
+                ['M6: Insecure Authorization','Review role/permission checks on backend endpoints.'],
+                ['M7: Client Code Quality','Address hotspot findings raised in Section 3.'],
+                ['M8: Code Tampering','Confirm integrity / tamper detection controls.'],
+                ['M9: Reverse Engineering','Confirm obfuscation status of release builds.'],
+                ['M10: Extraneous Functionality','Remove debug endpoints and test credentials.']
+            ],[65,115]);
+
+            // Risk
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'6. Risk Assessment',state);
+            doc.setTextColor(18,59,102); doc.setFont('helvetica','bold'); doc.setFontSize(24);
+            doc.text(`${model.score ?? 'N/A'} / 100`,15,state.y+5); state.y+=18;
+            pdfParagraph(doc,model,state,`Configured thresholds: 80\u2013100 Low Risk, 55\u201379 Medium Risk, below 55 High Risk. Current classification: ${model.risk}.`,9);
+            if(model.negative.length){
+                pdfTitle(doc,model,'Priority Review',state);
+                model.negative.forEach((f,i)=>{
+                    pdfParagraph(doc,model,state,`${i+1}. ${f.title} \u2014 ${f.severity} (${f.deduction}). ${f.description}`,8.5);
+                });
+            } else {
+                pdfParagraph(doc,model,state,'No negative dashboard deductions were returned for this scan.',9);
+            }
+
+            // Remediation
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'7. Remediation Recommendations',state);
+            model.recommendations.forEach((r,i)=>pdfParagraph(doc,model,state,`${i+1}. ${r}`,9));
+            pdfParagraph(doc,model,state,'After changes are applied, repeat the scan and compare the security score, finding set, permission/configuration evidence, package structure, entropy and native-library profile.',9);
+
+            // Methodology + Glossary (appendix, ensures full 8-10 page report)
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'8. Methodology & Glossary',state);
+            pdfParagraph(doc,model,state,'This report is generated entirely client-side. The application package is hashed (SHA-256), its byte-level Shannon entropy is calculated, and its internal structure (manifest, bytecode, native libraries, assets and resources) is parsed directly from the archive. These local indicators are combined with the findings and scorecard returned by the configured ASAF backend service to produce the score and classification in this report.',9);
+            pdfTitle(doc,model,'Glossary of Terms',state);
+            pdfTable(doc,model,state,[
+                ['Term','Definition'],
+                ['SHA-256','Cryptographic hash used to uniquely fingerprint the analyzed package file.'],
+                ['Shannon entropy','A 0\u20138 measure of byte-level randomness; higher values can indicate packing or encryption.'],
+                ['Manifest','AndroidManifest.xml \u2014 declares components, permissions and configuration.'],
+                ['classes.dex','Compiled Dalvik bytecode containing the application executable logic.'],
+                ['Hotspot','A finding that is not conclusively a vulnerability but merits manual review.'],
+                ['Dangerous permission','An Android permission granting access to sensitive user data or device functions.']
+            ],[55,125]);
+
+            // Conclusion
+            state.page++; state.y=pdfAddPage(doc,model,state.page,logo);
+            pdfTitle(doc,model,'9. Conclusion',state);
+            pdfParagraph(doc,model,state,`The assessment of ${model.name} produced a score of ${model.score ?? 'N/A'} / 100 and a classification of ${model.risk}. The report consolidates the available package, configuration and backend scorecard evidence into a full professional record.`,9);
+            pdfTable(doc,model,state,[
+                ['Audit metadata','Value'],
+                ['Generated',model.generated],
+                ['Application',model.name],
+                ['SHA-256',model.sha256],
+                ['Backend finding summary',model.backendSummary]
+            ]);
+
+            pdfFooter(doc);
+
+            const safeName=model.name.replace(/[^a-z0-9._-]/gi,'_');
+            downloadBlob(doc.output('blob'),`${safeName}-security-report.pdf`);
+        }
+
+        function downloadWordReport(audit){
+            const model=buildReportModel(audit);
+            const html=buildWordHtml(model);
+            const safeName=model.name.replace(/[^a-z0-9._-]/gi,'_');
+            downloadBlob(new Blob([html],{type:'application/msword'}),`${safeName}-security-report.doc`);
+        }
+
+        async function handleReportDownload(kind,audit,button){
+            if(!audit){ alert('Please complete a scan before downloading the report.'); return; }
+            const original=button.innerText;
+            button.disabled=true; button.innerText='GENERATING...';
+            try{
+                if(kind==='pdf') await generateCondensedPDF(audit);
+                else downloadWordReport(audit);
+            }catch(err){
+                console.error(err);
+                alert(`Could not generate the ${kind.toUpperCase()} report: ${err.message}`);
+            }finally{
+                button.disabled=false; button.innerText=original;
+            }
+        }
+
+        if (downloadPdfBtn) {
+            downloadPdfBtn.addEventListener('click', () =>
+                handleReportDownload('pdf', activeAudit, downloadPdfBtn)
+            );
+        }
+        if (downloadWordBtn) {
+            downloadWordBtn.addEventListener('click', () =>
+                handleReportDownload('word', activeAudit, downloadWordBtn)
+            );
+        }
+
+
+        const vulnerabilitySearchBtn = document.getElementById('vulnerability-search-btn');
+        const vulnerabilitySearchInput = document.getElementById('vulnerability-search-input');
+        const vulnerabilitySearchStatus = document.getElementById('vulnerability-search-status');
+
+        if (vulnerabilitySearchBtn) {
+            vulnerabilitySearchBtn.addEventListener('click', async () => {
+                const query = (vulnerabilitySearchInput?.value || '').trim();
+                if (!query) {
+                    vulnerabilitySearchStatus.innerText = 'Enter an MD5, package name, app name or file name.';
+                    return;
+                }
+                try {
+                    requireApiKey();
+                    vulnerabilitySearchStatus.innerText = 'Searching...';
+                    const resp = await fetch('/api/v1/search', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': BACKEND_API_KEY,
+                            'X-Mobsf-Api-Key': BACKEND_API_KEY,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams({ query }),
+                        cache: 'no-store'
+                    });
+                    if (!resp.ok) throw new Error(`Search failed (HTTP ${resp.status})`);
+                    const data = await resp.json();
+                    if (data.checksum) {
+                        vulnerabilitySearchStatus.innerText = `Scan found: ${data.checksum}`;
+                        window.location.href = `/static_analyzer/${encodeURIComponent(data.checksum)}/`;
+                    } else {
+                        vulnerabilitySearchStatus.innerText = data.error || 'No matching scan found.';
+                    }
+                } catch (err) {
+                    vulnerabilitySearchStatus.innerText = err.message;
+                }
+            });
+        }
+
+        // Copy Hash interaction
+        copyHashBtn?.addEventListener('click', () => {
+            if (!activeAudit) return;
+            const copyValue = String(activeAudit.sha256 || '');
+            const finishCopy = () => {
+                const prevText = copyHashBtn.innerText;
+                copyHashBtn.innerText = "COPIED!";
+                copyHashBtn.className = "text-greenAccent text-[8px] font-bold tracking-wider";
+                setTimeout(() => {
+                    copyHashBtn.innerText = prevText;
+                    copyHashBtn.className = "text-cyanAccent hover:underline text-[8px] uppercase tracking-wider font-bold";
+                }, 1200);
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(copyValue).then(finishCopy).catch(() => {});
+            } else {
+                const temp = document.createElement('textarea');
+                temp.value = copyValue;
+                temp.style.position = 'fixed';
+                temp.style.opacity = '0';
+                document.body.appendChild(temp);
+                temp.select();
+                try {
+                    document.execCommand('copy');
+                    finishCopy();
+                } catch (_) {}
+                temp.remove();
+            }
+        });
+
+        // Real logout: clear local UI state and leave the authenticated session.
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                sessionRegistry = [];
+                try { sessionStorage.clear(); } catch (_) {}
+                try { localStorage.removeItem('asaf_active_scan'); } catch (_) {}
+                window.location.href = '/logout';
+            });
+        }
+
+        // Initialize server-backed history when the dashboard opens.
+        loadServerScanHistory();
+
+
+    </script>
+</body>
+</html>

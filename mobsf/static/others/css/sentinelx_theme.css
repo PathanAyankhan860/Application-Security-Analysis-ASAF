@@ -1,0 +1,128 @@
+/* SentinelX Modern Theme */
+
+:root {
+  --sx-bg: #0f1117;
+  --sx-surface: #161925;
+  --sx-surface-2: #1e2230;
+  --sx-border: #2a2f42;
+  --sx-accent: #22d3c5;
+  --sx-accent-2: #38bdf8;
+  --sx-text: #e6e8ee;
+  --sx-text-muted: #9aa1b5;
+  --sx-danger: #ef4444;
+  --sx-warning: #f59e0b;
+  --sx-success: #22c55e;
+  --sx-info: #38bdf8;
+  --sx-radius: 12px;
+  --sx-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+body {
+  background-color: var(--sx-bg) !important;
+  color: var(--sx-text) !important;
+}
+
+.card {
+  background-color: var(--sx-surface) !important;
+  border: 1px solid var(--sx-border) !important;
+  border-radius: var(--sx-radius) !important;
+  box-shadow: var(--sx-shadow) !important;
+  margin-bottom: 20px !important;
+}
+
+.card-body {
+  padding: 22px !important;
+}
+
+.badge {
+  border-radius: 6px !important;
+  padding: 5px 10px !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+}
+
+.badge.bg-danger { background-color: var(--sx-danger) !important; }
+.badge.bg-warning { background-color: var(--sx-warning) !important; color: #1a1a1a !important; }
+.badge.bg-success { background-color: var(--sx-success) !important; }
+.badge.bg-info { background-color: var(--sx-info) !important; }
+.badge.bg-primary { background-color: var(--sx-accent-2) !important; }
+.badge.bg-secondary { background-color: var(--sx-border) !important; }
+
+.btn {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary, .btn-info {
+  background-color: var(--sx-accent-2) !important;
+  border-color: var(--sx-accent-2) !important;
+}
+
+.btn-success {
+  background-color: var(--sx-success) !important;
+  border-color: var(--sx-success) !important;
+}
+
+.table {
+  color: var(--sx-text) !important;
+}
+
+.table-bordered {
+  border-color: var(--sx-border) !important;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+  background-color: var(--sx-surface-2) !important;
+}
+
+.table thead th {
+  background-color: var(--sx-surface-2) !important;
+  border-color: var(--sx-border) !important;
+  color: var(--sx-text-muted) !important;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.sidebar, .main-sidebar {
+  background-color: var(--sx-surface) !important;
+  border-right: 1px solid var(--sx-border) !important;
+}
+
+.nav-sidebar .nav-link {
+  border-radius: 8px !important;
+  margin: 2px 8px !important;
+}
+
+.nav-sidebar .nav-link:hover {
+  background-color: var(--sx-surface-2) !important;
+}
+
+.navbar, .main-header {
+  background-color: var(--sx-surface) !important;
+  border-bottom: 1px solid var(--sx-border) !important;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sx-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sx-border);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sx-accent);
+}
