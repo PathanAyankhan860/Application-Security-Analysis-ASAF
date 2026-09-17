@@ -1,6 +1,6 @@
 """Module holding the functions for the db."""
 import logging
-
+import json
 from django.conf import settings
 
 from mobsf.MobSF.utils import (
@@ -38,11 +38,10 @@ def get_context_from_db_entry(db_entry):
             'proj_guid': db_entry[0].PROJ_GUID,
             'opti_tool': db_entry[0].OPTI_TOOL,
             'target_run': db_entry[0].TARGET_RUN,
-            'files': python_list(db_entry[0].FILES),
-            'strings': python_list(db_entry[0].STRINGS),
-            'binary_analysis': python_list(db_entry[0].BINARY_ANALYSIS),
-            'binary_warnings': python_list(db_entry[0].BINARY_WARNINGS),
-            'logs': get_scan_logs(db_entry[0].MD5),
+            'files': json.loads(db_entry[0].FILES) if db_entry[0].FILES else [],
+	    'strings': json.loads(db_entry[0].STRINGS) if db_entry[0].STRINGS else [],
+	    'binary_analysis': json.loads(db_entry[0].BINARY_ANALYSIS) if db_entry[0].BINARY_ANALYSIS else {},
+	    'binary_warnings': json.loads(db_entry[0].BINARY_WARNINGS) if db_entry[0].BINARY_WARNINGS else [],
         }
         return context
     except Exception:
