@@ -136,7 +136,7 @@ APPMONSTA_URL = 'https://api.appmonsta.com/v1/stores/android/details/'
 ITUNES_URL = 'https://itunes.apple.com/lookup'
 GITHUB_URL = ('https://github.com/MobSF/Mobile-Security-Framework-MobSF/'
               'releases/latest')
-FRIDA_SERVER = 'https://api.github.com/repos/frida/frida/releases/tags/'
+FRIDA_SERVER = 'https://api.github.com/repos/frida/frida/releases/latest'
 GOOGLE = 'https://www.google.com'
 PLAYSTORE = 'https://play.google.com'
 BAIDU = 'https://www.baidu.com/'
@@ -364,6 +364,15 @@ USE_X_FORWARDED_HOST = bool(
 USE_X_FORWARDED_PORT = bool(
     os.getenv('MOBSF_USE_X_FORWARDED_PORT', '1') == '1')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# ASAF AI Security Intelligence Layer
+AI_ENABLED = bool(os.getenv('AI_ENABLED', '0') == '1')
+AI_PROVIDER = os.getenv('AI_PROVIDER', 'ollama')
+AI_MODEL = os.getenv('AI_MODEL', '')
+AI_BASE_URL = os.getenv('AI_BASE_URL', 'http://127.0.0.1:11434')
+AI_API_KEY = get_secret_from_file_or_env('AI_API_KEY')
+AI_TIMEOUT = int(os.getenv('AI_TIMEOUT', '30'))
+AI_MAX_FINDINGS = int(os.getenv('AI_MAX_FINDINGS', '50'))
+AI_MAX_EVIDENCE_CHARS = int(os.getenv('AI_MAX_EVIDENCE_CHARS', '4000'))
 # ===========================
 # ENTERPRISE FEATURE REQUESTS
 # ===========================
@@ -475,7 +484,7 @@ else:
     Examples:
     JAVA_DIRECTORY = 'C:/Program Files/Java/jdk1.7.0_17/bin/'
     JAVA_DIRECTORY = '/usr/bin/'
-    JADX_BINARY = 'C:/Users/Ajin/AppData/Local/Programs/jadx/bin/jadx.bat'
+    JADX_BINARY = 'C:/jadx/bin/jadx.bat'
     JADX_BINARY = '/Users/ajin/jadx/bin/jadx'
     """
     # ==========================================================
