@@ -249,6 +249,22 @@ if settings.API_ONLY == '0':
         re_path(r'^tasks$',
                 async_task.list_tasks,
                 name='list_tasks'),
+        # ASAF AI Web UI
+        re_path(r'^ai/analyze-finding$',
+                ai_views.web_analyze_finding,
+                name='ai_web_analyze_finding'),
+        re_path(r'^ai/scan-summary$',
+                ai_views.web_scan_summary,
+                name='ai_web_scan_summary'),
+        re_path(r'^ai/ask$',
+                ai_views.web_ask,
+                name='ai_web_ask'),
+        re_path(r'^ai/remediation$',
+                ai_views.web_remediation,
+                name='ai_web_remediation'),
+        re_path(r'^ai/report$',
+                ai_views.web_report,
+                name='ai_web_report'),
         # Static Analysis
         # Android
         re_path(fr'^static_analyzer/{checksum_regex}/$',
