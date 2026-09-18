@@ -9,7 +9,6 @@ from ast import literal_eval
 
 from django.conf import settings
 
-from mobsf.MobSF.utils import python_dict, python_list
 from mobsf.StaticAnalyzer.models import (
     RecentScansDB,
     StaticAnalyzerAndroid,
@@ -52,7 +51,6 @@ FINDING_FIELDS = (
     'firebase_urls',
     'trackers',
 )
-SEVERITIES = ('critical', 'high', 'warning', 'medium', 'low', 'info')
 
 
 def _limit(value, max_chars=None):
@@ -180,7 +178,8 @@ def _walk_findings(category, value, prefix=''):
                 findings.append(normalize_finding(
                     category, f'{prefix}{index}', item))
             else:
-                findings.extend(_walk_findings(category, item, f'{prefix}{index}.'))
+                findings.extend(_walk_findings(
+                    category, item, f'{prefix}{index}.'))
     elif isinstance(value, dict):
         for key, item in value.items():
             child_index = f'{prefix}{key}'
