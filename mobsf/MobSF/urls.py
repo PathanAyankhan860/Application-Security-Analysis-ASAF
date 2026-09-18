@@ -1,5 +1,6 @@
 from django.urls import re_path
 
+from mobsf.AI import views as ai_views
 from mobsf.DynamicAnalyzer.views.common import device
 from mobsf.DynamicAnalyzer.views.common.frida import views as frida
 from mobsf.DynamicAnalyzer.views.android import dynamic_analyzer as dz
@@ -102,6 +103,12 @@ urlpatterns = [
     re_path(r'^api/v1/scans$', api_sz.api_recent_scans),
     re_path(r'^api/v1/compare$', api_sz.api_compare),
     re_path(r'^api/v1/scorecard$', api_sz.api_scorecard),
+    # ASAF AI Security Intelligence Layer
+    re_path(r'^api/v1/ai/analyze-finding$', ai_views.analyze_finding),
+    re_path(r'^api/v1/ai/scan-summary$', ai_views.scan_summary),
+    re_path(r'^api/v1/ai/ask$', ai_views.ask),
+    re_path(r'^api/v1/ai/remediation$', ai_views.remediation),
+    re_path(r'^api/v1/ai/report$', ai_views.report),
     # Static Suppression
     re_path(r'^api/v1/suppress_by_rule$', api_sz.api_suppress_by_rule_id),
     re_path(r'^api/v1/suppress_by_files$', api_sz.api_suppress_by_files),
