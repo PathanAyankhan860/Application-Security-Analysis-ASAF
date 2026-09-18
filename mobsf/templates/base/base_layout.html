@@ -63,6 +63,15 @@
   {% block content %}
   
   {% endblock %}
+  {% if md5 %}
+  <div class="content-wrapper">
+    <section class="content">
+      <div class="container-fluid">
+        {% include "static_analysis/asaf_ai_widget.html" %}
+      </div>
+    </section>
+  </div>
+  {% endif %}
 
   <!-- /.content-wrapper -->
   <footer class="main-footer">
